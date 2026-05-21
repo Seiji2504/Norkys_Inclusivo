@@ -9,7 +9,6 @@ from google.genai import types
 # Cargar variables de entorno
 load_dotenv()
 
-# Inicializar cliente oficial de Gemini 2026
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     raise ValueError("Falta la variable GEMINI_API_KEY en el archivo .env")
@@ -18,64 +17,77 @@ client = genai.Client(api_key=api_key)
 
 app = FastAPI(title="Norky's AI Assistant Backend")
 
-# Configurar CORS para permitir que tu React (localhost:5173) se comunique con Python
-# Configurar CORS definitivo (Permite TODO para evitar bloqueos locales)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # El comodín "*" permite localhost, 127.0.0.1, celulares, etc.
-    allow_credentials=False,  # Obligatorio poner False si usas "*" (no lo necesitamos de todos modos)
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Definimos el esquema estricto de respuesta que queremos de Gemini (Structured Output)
-class NavigationIntent(BaseModel):
-    action: str = Field(description="Acción a realizar. Debe ser 'navigate' si el usuario quiere ir a una sección, o 'unknown' si no se entiende.")
-    target: str = Field(description="Pestaña de destino. Valores permitidos: 'Home' (para inicio/carta), 'User' (para perfil), 'Fav' (favoritos), 'Cart' (carrito), 'accessibility' (pestaña accesibilidad).")
-    message: str = Field(description="Mensaje corto y amigable en español para leerle de vuelta al usuario. Ej: 'Entendido, te llevo a la carta de pollos.'")
+# NUEVA ESTRUCTURA DE RESPUESTA MULTI-ACCIÓN (Structured Output)
+class VoiceAction(BaseModel):
+    action: str = Field(
+        description="Acción a ejecutar. Valores permitidos: 'navigate' (cambiar pestaña), 'adjust_accessibility' (cambiar ajustes visuales), 'add_to_cart' (agregar producto), o 'unknown' (si no se entiende)."
+    )
+    target: str = Field(
+        description="Objetivo de la acción. Si action='navigate': 'Home', 'User', 'Fav', 'Cart', 'accessibility'. Si action='adjust_accessibility': 'textSize', 'contrast', 'dyslexia', 'headCursor'. Si action='add_to_cart': Nombre exacto o aproximado del producto (ej. 'Mostrito', 'Medio Brasa', 'Alitas Brasa', 'Norkys Burger')."
+    )
+    value: str = Field(
+        description="Valor a aplicar. Si es textSize: 'increase' o 'decrease'. Si es contrast: 'cycle'. Si es dyslexia o headCursor: 'toggle'. Si es add_to_cart: Cantidad en texto (ej: '1', '2'). Por defecto: ''."
+    )
+    message: str = Field(
+        description="Mensaje amigable en español latino para leerle de vuelta al usuario por parlantes. Ej: 'Entendido, te subo un nivel de tamaño de letra.'"
+    )
 
-# Modelo de datos que recibirá el endpoint
 class VoiceInput(BaseModel):
     text: str
 
-@app.post("/api/intent", response_model=NavigationIntent)
+@app.post("/api/intent", response_model=VoiceAction)
 async def process_voice_intent(user_input: VoiceInput):
     try:
-        # Prompt del sistema para entrenar a Gemini en su rol
+        # Prompt mejorado para entrenar a Gemini en las 3 funciones
         prompt = f"""
-        Analiza el siguiente comando de voz del usuario para una aplicación de pollería Norky's adaptativa.
-        Determina a qué sección quiere ir.
-        
+        Analiza el comando de voz del usuario para la pollería inclusiva Norky's.
+        Clasifica la intención en una de las siguientes acciones:
+
         Comando del usuario: "{user_input.text}"
-        
-        Mapea el destino estrictamente a uno de estos valores:
-        - Si quiere ir al inicio, menú, pollos, combos o carta -> target: 'Home'
-        - Si quiere ir a su perfil, su cuenta o cerrar sesión -> target: 'User'
-        - Si quiere ver favoritos o el corazón -> target: 'Fav'
-        - Si quiere ir al carrito de compras, bolsa o pagar -> target: 'Cart'
-        - Si quiere configurar accesibilidad, letra, contraste o daltonismo -> target: 'accessibility'
+
+        1. NAVEGACIÓN (action: 'navigate'):
+           - Ir a carta, inicio, combos -> target: 'Home'
+           - Ir a perfil, mi cuenta -> target: 'User'
+           - Ir a favoritos, ver mis corazones -> target: 'Fav'
+           - Ir a bolsa, carrito, pagar -> target: 'Cart'
+           - Ir a configuración, accesibilidad -> target: 'accessibility'
+
+        2. AJUSTES VISUALES (action: 'adjust_accessibility'):
+           - Agrandar letra, texto más grande -> target: 'textSize', value: 'increase'
+           - Achicar letra, texto más pequeño -> target: 'textSize', value: 'decrease'
+           - Cambiar contraste, modo daltónico -> target: 'contrast', value: 'cycle'
+           - Activar dislexia, fuente amigable -> target: 'dyslexia', value: 'toggle'
+           - Activar cursor, mover con la cabeza -> target: 'headCursor', value: 'toggle'
+
+        3. COMPRA (action: 'add_to_cart'):
+           - "Agrega un mostrito", "quiero pedir medio pollo", "pon una hamburguesa en mi bolsa"
+           -> target: Nombre del producto (debe coincidir semánticamente con: 'Mostrito', 'Medio Brasa', 'Alitas Brasa' o 'Norkys Burger').
+           -> value: Cantidad especificada por el usuario (ej: '1', '2'). Si no especifica cantidad, por defecto es '1'.
         """
 
-        # Llamada a Gemini con validación estructural de Pydantic
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite", # El modelo más rápido y barato para análisis de texto
+            model="gemini-3.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction="Eres el asistente de voz inteligente de Pollerías Norky's. Tu objetivo es procesar la navegación de usuarios mayores o discapacitados. Responde estrictamente con el JSON validado.",
+                system_instruction="Eres el asistente de voz inteligente de Pollerías Norky's. Tu objetivo es procesar la navegación, accesibilidad y adición al carrito para personas con discapacidad.",
                 response_mime_type="application/json",
-                response_schema=NavigationIntent, # Fuerza a Gemini a dar el JSON perfecto
+                response_schema=VoiceAction,
             ),
         )
 
-        # Parsear y devolver la respuesta JSON estructurada directamente al frontend
         import json
-        structured_data = json.loads(response.text)
-        return structured_data
+        return json.loads(response.text)
 
     except Exception as e:
+        print("\n--- ERROR ---")
+        print(e)
+        print("--------------\n")
         raise HTTPException(status_code=500, detail=str(e))
-
-# Iniciar servidor local
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
