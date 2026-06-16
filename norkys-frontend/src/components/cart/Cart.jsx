@@ -29,7 +29,7 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
         const { data } = await supabase
           .from('direcciones')
           .select('*')
-          .eq('id_usuario', user.id); // Ajustado a tu estructura
+          .eq('usuario_id', user.id); // Ajustado a tu estructura
         
         setDirecciones(data || []);
         if (data && data.length > 0) {

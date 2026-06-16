@@ -77,6 +77,9 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     faceMesh.onResults((results) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      // === LA LÍNEA MÁGICA: Dibuja tu rostro en vivo como fondo del lienzo ===
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
       if (results.multiFaceLandmarks && results.multiFaceLandmarks[0]) {
         const landmarks = results.multiFaceLandmarks[0];
         const nose = landmarks[4]; // Punta de la nariz
