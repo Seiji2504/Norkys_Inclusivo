@@ -37,7 +37,7 @@ class VoiceAction(BaseModel):
         description="Valor a aplicar. Si es textSize: 'increase' o 'decrease'. Si es contrast: 'cycle'. Si es dyslexia o headCursor: 'toggle'. Si es add_to_cart: Cantidad en texto (ej: '1', '2'). Por defecto: ''."
     )
     message: str = Field(
-        description="Mensaje amigable en español latino para leerle de vuelta al usuario por parlantes. Ej: 'Entendido, te subo un nivel de tamaño de letra.'"
+        description="Mensaje amigable de confirmación. DEBE estar estrictamente en el mismo idioma (español o inglés) en el que habló el usuario. Ej: 'Entendido, te llevo a la carta' o 'Understood, taking you to the menu.'"
     )
 
 class VoiceInput(BaseModel):
@@ -74,10 +74,10 @@ async def process_voice_intent(user_input: VoiceInput):
         """
 
         response = client.models.generate_content(
-            model="gemini-3.5-flash",
+            model="gemini-3.1-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction="Eres el asistente de voz inteligente de Pollerías Norky's. Tu objetivo es procesar la navegación, accesibilidad y adición al carrito para personas con discapacidad.",
+                system_instruction="Eres el asistente de voz inteligente de Pollerías Norky's. Tu objetivo es procesar la navegación, accesibilidad y adición al carrito para personas con discapacidad. Responde siempre en el mismo idioma (español o inglés) que usó el usuario.",
                 response_mime_type="application/json",
                 response_schema=VoiceAction,
             ),
