@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'; // <-- IMPORTADO useRef
 import { supabase } from './supabaseClient';
-import { Home, Heart, ShoppingCart, User, Mic } from 'lucide-react';
 import HomeContent from './components/home/HomeContent';
 import ProductDetail from './components/product/ProductDetail';
 import Profile from './components/profile/ProfileMenu';
