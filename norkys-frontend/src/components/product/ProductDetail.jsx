@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Star, Minus, Plus, Check } from 'lucide-react';
-import { supabase } from '../supabaseClient'; // Conectamos a tu BD
+import { supabase } from '../../supabaseClient';
 
-export default function ProductDetail({ producto, onBack }) {
-  const [subView, setSubView] = useState('detail'); // 'detail' | 'addons'
+
+export default function ProductDetail({ producto, onBack, onAddToCart, isLoggedIn, onNavigateToAuth }) {
+  const [subView, setSubView] = useState('detail'); 
   const [cantidad, setCantidad] = useState(1);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
-  // Estados para adicionales traídos de Supabase
   const [complementos, setComplementos] = useState([]);
   const [aditivos, setAditivos] = useState([]);
   const [selectedComps, setSelectedComps] = useState([]);
@@ -19,17 +19,9 @@ export default function ProductDetail({ producto, onBack }) {
 
   const fetchAddons = async () => {
     try {
-      // Traemos los complementos (categoría_id = 3 en tu BD)
-      const { data: compData } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('categoria_id', 3);
+      const { data: compData } = await supabase.from('productos').select('*').eq('categoria_id', 3);
       setComplementos(compData || []);
-
-      // Traemos los aditivos (Mayonesa, Ketchup, etc.)
-      const { data: adData } = await supabase
-        .from('aditivos')
-        .select('*');
+      const { data: adData } = await supabase.from('aditivos').select('*');
       setAditivos(adData || []);
     } catch (err) {
       console.error('Error cargando aditivos:', err);
@@ -38,23 +30,36 @@ export default function ProductDetail({ producto, onBack }) {
 
   const handleOrderClick = () => {
     if (subView === 'detail') {
-      // Si está en detalle, pasa a la pestaña de aditivos
       setSubView('addons');
     } else {
-      // Si ya está en aditivos, agrega al carrito y vuelve al home con animación
+      // BLOQUEO DE INVITADOS: Si intenta agregar al carrito sin estar logueado
+      if (!isLoggedIn) {
+        alert("Inicia sesión para poder agregar productos a tu carrito y ordenar 🍗");
+        onNavigateToAuth(); // Lo redirige de inmediato a la pantalla de Auth
+        return;
+      }
+
       setShowSuccessToast(true);
+      
+      if (onAddToCart) {
+        onAddToCart({
+          producto,
+          cantidad,
+          complements: selectedComps,
+          aditivos: selectedAds
+        });
+      }
+
       setTimeout(() => {
         setShowSuccessToast(false);
-        onBack(); // Te manda al Home
+        onBack(); 
       }, 2000);
     }
   };
 
-  // Popularidad dinámica según el rating
   const ratingScale = producto.rating ? parseFloat(producto.rating) : 5.0;
   const popularityPercent = Math.min(100, Math.max(10, (ratingScale / 5) * 100));
 
-  // Simulación de imágenes para aditivos (como no tienen en la BD por ahora)
   const getAditivoImg = (nombre) => {
     const imgs = {
       'Mayonesa': 'https://vgy.me/gI44gO.png',
@@ -68,7 +73,6 @@ export default function ProductDetail({ producto, onBack }) {
   return (
     <div className="flex-1 bg-[#FDFBF7] relative pb-24 flex flex-col overflow-y-auto no-scrollbar animate-in slide-in-from-right duration-300">
       
-      {/* Toast de Éxito Flotante */}
       {showSuccessToast && (
         <div className="fixed top-12 left-1/2 -translate-x-1/2 bg-[#2E7D32] text-white px-6 py-4 rounded-full shadow-2xl z-[100] flex items-center gap-3 animate-bounce">
           <div className="bg-white text-[#2E7D32] p-1 rounded-full"><Check size={16} strokeWidth={3} /></div>
@@ -76,7 +80,6 @@ export default function ProductDetail({ producto, onBack }) {
         </div>
       )}
 
-      {/* Botón de Atrás */}
       <div className="absolute top-8 left-6 z-20">
         <button 
           onClick={subView === 'addons' ? () => setSubView('detail') : onBack} 
@@ -86,7 +89,6 @@ export default function ProductDetail({ producto, onBack }) {
         </button>
       </div>
 
-      {/* Imagen del Producto - RECTANGULAR Y GRANDE */}
       <div className="h-72 w-full flex items-center justify-center px-6 mt-16 shrink-0 bg-[#FDFBF7]">
         <img 
           src={producto.imagen_url} 
@@ -95,13 +97,11 @@ export default function ProductDetail({ producto, onBack }) {
         />
       </div>
 
-      {/* Info del Producto */}
       <div className="px-8 mt-4 relative z-10 flex-1 flex flex-col">
         <h2 className="text-3xl font-black text-gray-800 mb-1 leading-tight">
           {producto.nombre}
         </h2>
         
-        {/* Rating e Info */}
         <div className="flex items-center gap-4 mb-4">
           <div className="flex items-center gap-1 bg-orange-50 px-3 py-1 rounded-xl border border-orange-100">
             <Star className="text-orange-400 fill-orange-400" size={16} />
@@ -110,17 +110,13 @@ export default function ProductDetail({ producto, onBack }) {
           <span className="text-gray-400 font-bold text-sm">26 mins</span>
         </div>
 
-        {/* CONTENIDO CONDICIONAL SEGÚN LA SUB-VISTA */}
         {subView === 'detail' ? (
-          /* ================= SUB-VISTA: DETALLE ORIGINAL ================= */
           <div className="flex flex-col flex-1">
             <p className="text-gray-500 leading-relaxed text-[14px] mb-6 h-28 overflow-y-auto no-scrollbar shrink-0">
               {producto.descripcion_completa || producto.descripcion}
             </p>
 
-            {/* Popularidad y Cantidad */}
             <div className="flex justify-between items-center mb-8 gap-6 shrink-0 mt-auto">
-              {/* Popularidad Dinámica */}
               <div className="flex-1">
                 <p className="text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Popularidad</p>
                 <div className="relative w-full h-2.5 bg-gray-200/70 rounded-full">
@@ -139,7 +135,6 @@ export default function ProductDetail({ producto, onBack }) {
                 </div>
               </div>
 
-              {/* Cantidad */}
               <div className="flex flex-col items-center shrink-0">
                 <p className="text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Cantidad</p>
                 <div className="flex items-center gap-3">
@@ -161,10 +156,7 @@ export default function ProductDetail({ producto, onBack }) {
             </div>
           </div>
         ) : (
-          /* ================= SUB-VISTA: PESTAÑA DE ADITIVOS (NUEVO) ================= */
           <div className="flex flex-col flex-1 animate-in fade-in duration-300">
-            
-            {/* Sección Complementos */}
             <div className="mb-4">
               <h3 className="text-sm font-black text-gray-800 mb-2 uppercase tracking-wide">Complementos</h3>
               <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
@@ -189,7 +181,6 @@ export default function ProductDetail({ producto, onBack }) {
               </div>
             </div>
 
-            {/* Sección Aditivos */}
             <div className="mb-6">
               <h3 className="text-sm font-black text-gray-800 mb-2 uppercase tracking-wide">Aditivos</h3>
               <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
@@ -213,11 +204,9 @@ export default function ProductDetail({ producto, onBack }) {
                 })}
               </div>
             </div>
-
           </div>
         )}
 
-        {/* Footer Común: Precio y Botón */}
         <div className="flex items-center gap-3 mt-auto shrink-0 pb-6">
           <div className="flex-col">
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Total</span>

@@ -11,7 +11,6 @@ import {
   LogOut 
 } from 'lucide-react';
 
-// <-- AGREGAMOS "onNavigate" a las propiedades del componente
 export default function Profile({ isLoggedIn, user, onLogin, onLogout, onBack, onNavigate }) {
   
   const menuOptions = [
@@ -42,28 +41,25 @@ export default function Profile({ isLoggedIn, user, onLogin, onLogout, onBack, o
 
       {/* Tarjeta de Información de Usuario */}
       <div className="flex flex-col items-center px-6 mt-6 shrink-0">
-        {/* Foto de Perfil con Anillo Verde */}
         <div className="w-32 h-32 rounded-full border-4 border-[#2E7D32] p-1 shadow-xl shrink-0 bg-[#FDFBF7] overflow-hidden">
           <img 
-            /* CORREGIDO: Agregamos la validación extra 'user &&' */
             src={isLoggedIn && user && user.foto ? user.foto : "https://ui-avatars.com/api/?name=Guest+User&background=0D8ABC&color=fff&size=128"} 
             alt="Avatar" 
             className="w-full h-full object-cover rounded-full"
           />
         </div>
 
-        {/* Nombres y Correo (Logueado vs Invitado) */}
         <h3 className="text-xl font-black text-gray-800 mt-4 text-center">
-          {/* CORREGIDO: Validamos que exista 'user' antes de leer para evitar pantallas blancas */}
           {isLoggedIn ? (user?.nombre_completo || 'Cargando...') : 'Usuario Invitado'}
         </h3>
         <p className="text-gray-400 text-sm mt-1 text-center font-medium">
           {isLoggedIn ? (user?.email || 'Cargando...') : 'Inicia sesión para guardar tus pedidos'}
         </p>
 
+        {/* CORREGIDO: Ahora sí te manda a la pantalla de Editar Perfil real de Supabase */}
         <button 
-          onClick={isLoggedIn ? () => alert("Editar perfil en desarrollo...") : onLogin}
-          className="mt-6 bg-[#2E7D32] text-white font-bold px-12 py-3 rounded-full shadow-lg hover:bg-[#1b5e20] active:scale-95 transition-transform shrink-0"
+          onClick={isLoggedIn ? () => onNavigate('edit_profile') : onLogin}
+          className="mt-6 bg-[#2E7D32] text-white font-bold px-12 py-3 rounded-full shadow-lg hover:bg-[#1b5e20] active:scale-95 transition-transform shrink-0 cursor-pointer"
         >
           {isLoggedIn ? 'Editar Perfil' : 'Iniciar Sesión'}
         </button>
@@ -77,7 +73,6 @@ export default function Profile({ isLoggedIn, user, onLogin, onLogout, onBack, o
             return (
               <div key={opt.id}>
                 <button 
-                  /* <-- CAMBIADO: Ahora llama a la función onNavigate de React */
                   onClick={() => onNavigate(opt.id)}
                   className="w-full flex items-center justify-between py-4 px-2 hover:bg-gray-50 rounded-xl transition-colors active:scale-[0.98]"
                 >

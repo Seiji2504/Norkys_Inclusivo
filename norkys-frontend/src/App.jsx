@@ -1,16 +1,37 @@
-import { useState, useEffect } from 'react';
-import { Search, SlidersHorizontal, Mic, Heart, Home, ShoppingCart, User, Star, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react'; // <-- IMPORTADO useRef
 import { supabase } from './supabaseClient';
-import ProductDetail from './components/ProductDetail';
-import Profile from './components/Profile';
-import Accessibility from './components/Accessibility';
-import Auth from './components/Auth'; // <-- IMPORTAMOS EL COMPONENTE AUTH
+import { Home, Heart, ShoppingCart, User, Mic } from 'lucide-react';
+import HomeContent from './components/home/HomeContent';
+import ProductDetail from './components/product/ProductDetail';
+import Profile from './components/profile/ProfileMenu';
+import Accessibility from './components/accessibility/Accessibility';
+import Auth from './components/Auth';
+import Favorites from './components/Favorites';
+import Cart from './components/cart/Cart';
+import VoiceAssistantOverlay from './components/accessibility/VoiceAssistantOverlay'; 
+import HeadTrackingCalibration from './components/accessibility/HeadTrackingCalibration';
+import HeadCursorTracker from './components/accessibility/HeadCursorTracker'; 
+import DwellController from './components/accessibility/DwellController'; // <-- IMPORTADO
+import { translations } from './utils/translations'; // <-- IMPORTADO
+import OrderHistory from './components/profile/OrderHistory'; // <-- IMPORTADO
+import SavedAddresses from './components/profile/SavedAddresses'; // <-- IMPORTADO
+import SavedPayments from './components/profile/SavedPayments';   // <-- IMPORTADO
+import Faq from './components/profile/Faq';                      // <-- IMPORTADO
+import PrivacyPolicy from './components/profile/PrivacyPolicy';   // <-- IMPORTADO
+import EditProfile from './components/profile/EditProfile';                 // <-- IMPORTADO
+import NotificationSettings from './components/profile/NotificationSettings'; // <-- IMPORTADO
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [productos, setProductos] = useState([]);
   const [productosFiltrados, setProductosFiltrados] = useState([]);
-  
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('efectivo');
+
+  const [cursorPos, setCursorPos] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+
+  // Guarda las coordenadas de origen {x, y} de la calibración del rostro
+  const [calibrationData, setCalibrationData] = useState({ x: 20, y: 15 }); // Por defecto al centro
+
   const [activeTab, setActiveTab] = useState('Home');
   const [activeCategory, setActiveCategory] = useState('Todo');
   const [favorites, setFavorites] = useState([]);
@@ -18,32 +39,66 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null); 
-  const [profileScreen, setProfileScreen] = useState('menu'); // 'menu' | 'accessibility' | 'auth'
+  const [profileScreen, setProfileScreen] = useState('menu');
+  const [sortBy, setSortBy] = useState('normal'); 
+  const [cart, setCart] = useState([]);
 
+  const [language, setLanguage] = useState('es'); // Idioma global: 'es' | 'en'
+
+  // CONFIGURACIÓN DE ACCESIBILIDAD GLOBAL
   const [accessibility, setAccessibility] = useState({
-    textSize: 1,
-    contrast: 1,
-    dyslexia: false,
-    lineSpacing: 1,
-    headCursor: false
+    textSize: 1, contrast: 1, dyslexia: false, lineSpacing: 1, headCursor: false
   });
 
-  // --- ESTADOS DE AUTENTICACIÓN REAL ---
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // Empieza falso
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState(null);
+
+  // --- FUNCIÓN DE FEEDBACK SONORO Y VIBRACIÓN (Web Audio API & Vibration API) ---
+  const playInteractionFeedback = () => {
+    // Leemos la configuración actual del localStorage del celular
+    const saved = localStorage.getItem('norkys-notifications');
+    const settings = saved ? JSON.parse(saved) : { vibracion: true, sonidos: true };
+
+    // 1. Vibración Física (Nativo en celulares Android/Chrome)
+    if (settings.vibracion && navigator.vibrate) {
+      navigator.vibrate(40); // Zumbido háptico de 40ms
+    }
+
+    // 2. Sintetizador de Sonidos (Web Audio API - Sin archivos de audio externos)
+    if (settings.sonidos) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(600, audioCtx.currentTime); // Tono limpio en 600Hz
+        gainNode.gain.setValueAtTime(0.04, audioCtx.currentTime); // Volumen suave
+
+        oscillator.start();
+        // Se apaga de forma exponencial en 50ms para simular un "clic" corto y agradable
+        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.05);
+        oscillator.stop(audioCtx.currentTime + 0.05);
+      } catch (e) {
+        console.error("Web Audio API no soportado:", e);
+      }
+    }
+  };
+
+  // Solicitar permiso de notificaciones push de forma silenciosa al abrir la app
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
 
   // Escuchar cambios de sesión de Supabase Auth
   useEffect(() => {
-    // 1. Revisar si ya hay sesión al abrir la página
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      handleAuthChange(session);
-    });
-
-    // 2. Escuchar cambios de inicio/cierre de sesión
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleAuthChange(session);
-    });
-
+    supabase.auth.getSession().then(({ data: { session } }) => { handleAuthChange(session); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -51,124 +106,119 @@ export default function App() {
     if (session?.user) {
       setIsLoggedIn(true);
       try {
-        // CORRECCIÓN: Traemos los perfiles sin usar .single() para evitar el error 406
-        const { data, error } = await supabase
-          .from('perfiles')
-          .select('*')
-          .eq('id', session.user.id);
-
+        const { data, error } = await supabase.from('perfiles').select('*').eq('id', session.user.id);
         if (error) throw error;
-
-        // Si por alguna razón el perfil no existe en la tabla personalizada (como te pasó con mathias@test.com)
         if (!data || data.length === 0) {
           const fallbackName = session.user.email.split('@')[0];
-          
-          // Creamos datos temporales para que React no se ponga en blanco
-          setUserData({
-            nombre_completo: fallbackName,
-            email: session.user.email,
-            foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + fallbackName
-          });
-
-          // Insertamos la fila faltante en caliente usando upsert (evita colisiones asíncronas)
-          await supabase.from('perfiles').upsert([
-            {
-              id: session.user.id,
-              nombre_completo: fallbackName,
-              telefono: '',
-              rol: 'cliente'
-            }
-          ]);
+          setUserData({ nombre_completo: fallbackName, email: session.user.email, foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + fallbackName });
+          await supabase.from('perfiles').upsert([{ id: session.user.id, nombre_completo: fallbackName, telefono: '', rol: 'cliente' }]);
         } else {
-          // Si el perfil sí existe (comportamiento normal)
           const profile = data[0];
-          setUserData({
-            nombre_completo: profile.nombre_completo,
-            email: session.user.email,
-            foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + profile.nombre_completo.replace(/\s+/g, '')
-          });
+          setUserData({ nombre_completo: profile.nombre_completo, email: session.user.email, foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + profile.nombre_completo.replace(/\s+/g, '') });
         }
-      } catch (err) {
-        console.error("Error cargando perfil:", err.message);
-      }
+        fetchFavorites(session.user.id);
+      } catch (err) { console.error(err.message); }
     } else {
       setIsLoggedIn(false);
       setUserData(null);
+      setFavorites([]);
     }
   };
 
+  const fetchFavorites = async (userId) => {
+    const { data } = await supabase.from('favoritos').select('producto_id').eq('usuario_id', userId);
+    if (data) setFavorites(data.map(f => f.producto_id));
+  };
+
   const handleLogout = async () => {
+    playInteractionFeedback(); // <-- AGREGAR ESTA LÍNEA
     await supabase.auth.signOut();
     handleTabChange('Home');
   };
 
-  // --- EFECTOS DE ACCESIBILIDAD ---
-  const brandColor = accessibility.contrast === 2 
-    ? '#000000' 
-    : accessibility.contrast === 3 
-      ? '#5c531d' 
-      : accessibility.contrast === 4
-        ? '#008080' 
-        : '#2E7D32'; 
-
-  useEffect(() => {
-    const fontSizes = { 1: '16px', 2: '18px', 3: '20px', 4: '22px' };
-    document.documentElement.style.fontSize = fontSizes[accessibility.textSize];
-
-    const body = document.body;
-    if (accessibility.dyslexia) {
-      body.style.fontFamily = '"Comic Neue", "Comic Sans MS", cursive, sans-serif';
-      body.classList.add('tracking-wide');
-    } else {
-      body.style.fontFamily = '';
-      body.classList.remove('tracking-wide');
-    }
-
-    const lineSpacings = { 1: '1.5', 2: '1.8', 3: '2.2' };
-    body.style.lineHeight = lineSpacings[accessibility.lineSpacing];
-
-  }, [accessibility]);
-
-  useEffect(() => {
-    fetchProductos();
-  }, []);
-
-  const fetchProductos = async () => {
-    try {
-      const { data, error } = await supabase.from('productos').select('*');
-      if (error) throw error;
-      setProductos(data);
-      setProductosFiltrados(data);
-    } catch (error) {
-      console.error('Error:', error.message);
-    } finally {
-      setTimeout(() => setIsLoading(false), 1500);
-    }
+  // AGREGAR AL CARRITO
+  const handleAddToCart = (orderItem) => {
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
+    setCart(prev => {
+      const exists = prev.find(item => item.producto.id === orderItem.producto.id);
+      if (exists) {
+        return prev.map(item => item.producto.id === orderItem.producto.id ? { ...item, cantidad: item.cantidad + orderItem.cantidad } : item);
+      }
+      return [...prev, orderItem];
+    });
   };
 
-  useEffect(() => {
-    const results = productos.filter(p => 
-      p.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setProductosFiltrados(results);
-  }, [searchTerm, productos]);
+  // --- SINCRONIZACIÓN DE FAVORITOS (CORREGIDO) ---
+  const toggleFavorite = async (e, id) => {
+    e.stopPropagation();
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
+
+    // Bloqueo de accesibilidad: Sólo usuarios logueados
+    if (!isLoggedIn) {
+      alert("Inicia sesión para guardar tus favoritos de pollos 🍗");
+      handleTabChange('User'); // Te redirige al login
+      return;
+    }
+
+    const isFav = favorites.includes(id);
+
+    // 1. Actualización optimista instantánea en pantalla (CORREGIDO 'favId')
+    setFavorites(prev => isFav ? prev.filter(favId => favId !== id) : [...prev, id]);
+
+    // 2. Sincronización en caliente en Supabase
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) return;
+
+      if (isFav) {
+        // Eliminar de favoritos en Supabase
+        await supabase
+          .from('favoritos')
+          .delete()
+          .eq('usuario_id', session.user.id)
+          .eq('producto_id', id);
+      } else {
+        // Insertar en favoritos en Supabase
+        await supabase
+          .from('favoritos')
+          .upsert([{ usuario_id: session.user.id, producto_id: id }]);
+      }
+    } catch (err) {
+      console.error("Error sincronizando favorito:", err.message);
+    }
+  };
 
   const handleCategoryChange = (cat) => {
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
     setActiveCategory(cat);
-    if (cat === 'Todo') {
-      setProductosFiltrados(productos);
-    } else {
-      const catMap = { 'Combos': 2, 'Complementos': 3, 'Ofertas': 4 };
-      setProductosFiltrados(productos.filter(p => p.categoria_id === catMap[cat]));
-    }
   };
 
-  const toggleFavorite = (e, id) => {
-    e.stopPropagation(); 
-    setFavorites(prev => prev.includes(id) ? prev.filter(favId => favId !== id) : [...prev, id]);
-  };
+  // Filtros unificados de búsqueda, categoría y ordenamiento
+  useEffect(() => {
+    let results = [...productos];
+
+    if (activeCategory !== 'Todo') {
+      const catMap = { 'Combos': 2, 'Complementos': 3, 'Ofertas': 4 };
+      results = results.filter(p => p.categoria_id === catMap[activeCategory]);
+    }
+
+    if (searchTerm) {
+      results = results.filter(p => p.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
+
+    if (sortBy === 'price-asc') {
+      results.sort((a, b) => a.precio - b.precio);
+    } else if (sortBy === 'price-desc') {
+      results.sort((a, b) => b.precio - a.precio);
+    } else if (sortBy === 'rating') {
+      results.sort((a, b) => b.rating - a.rating);
+    }
+
+    setProductosFiltrados(results);
+  }, [searchTerm, activeCategory, sortBy, productos]);
 
   const startSpeechRecognition = () => {
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return alert("Navegador no compatible");
     const recognition = new SpeechRecognition();
@@ -182,32 +232,51 @@ export default function App() {
     recognition.onerror = () => setIsListening(false);
   };
 
-  const handleProductClick = (prod) => {
-    if (document.startViewTransition) {
-      document.startViewTransition(() => {
-        setSelectedProduct(prod);
-      });
+  const brandColor = accessibility.contrast === 2 ? '#000000' : accessibility.contrast === 3 ? '#5c531d' : accessibility.contrast === 4 ? '#008080' : '#2E7D32'; 
+
+  useEffect(() => {
+    const fontSizes = { 1: '16px', 2: '18px', 3: '20px', 4: '22px' };
+    document.documentElement.style.fontSize = fontSizes[accessibility.textSize];
+    const body = document.body;
+    if (accessibility.dyslexia) {
+      body.style.fontFamily = '"Comic Neue", "Comic Sans MS", cursive, sans-serif';
+      body.classList.add('tracking-wide');
     } else {
-      setSelectedProduct(prod);
+      body.style.fontFamily = '';
+      body.classList.remove('tracking-wide');
     }
+    const lineSpacings = { 1: '1.5', 2: '1.8', 3: '2.2' };
+    body.style.lineHeight = lineSpacings[accessibility.lineSpacing];
+  }, [accessibility]);
+
+  useEffect(() => { fetchProductos(); }, []);
+
+  const fetchProductos = async () => {
+    const { data } = await supabase.from('productos').select('*');
+    if (data) { setProductos(data); setProductosFiltrados(data); }
+    setTimeout(() => setIsLoading(false), 1500);
+  };
+
+  const handleProductClick = (prod) => {
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
+    if (document.startViewTransition) { document.startViewTransition(() => setSelectedProduct(prod)); }
+    else { setSelectedProduct(prod); }
   };
   
   const handleBackToHome = () => {
-    const transition = () => {
-      setSelectedProduct(null);
-      setActiveTab('Home');
-      setProfileScreen('menu');
-    };
-
-    if (document.startViewTransition) {
-      document.startViewTransition(transition);
-    } else {
-      transition();
-    }
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
+    const transition = () => { setSelectedProduct(null); setActiveTab('Home'); setProfileScreen('menu'); };
+    if (document.startViewTransition) { document.startViewTransition(transition); }
+    else { transition(); }
   };
 
   const handleTabChange = (tabName) => {
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
     const change = () => {
+      // CORRECCIÓN: Si cambia de pestaña por clic manual en el navbar, apagamos la IA de forma segura
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
       setSelectedProduct(null);
       setProfileScreen('menu');
       setActiveTab(tabName);
@@ -221,97 +290,175 @@ export default function App() {
   };
 
   const handleProfileNavigation = (optionId) => {
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
     const transition = () => {
       if (optionId === 'accesibilidad') {
         setProfileScreen('accessibility');
+      } else if (optionId === 'pedidos') {
+        if (!isLoggedIn) { alert("Inicia sesión para poder ver tu historial de pedidos 🍗"); setProfileScreen('auth'); }
+        else { setProfileScreen('orders'); }
+      } else if (optionId === 'pago') {
+        if (!isLoggedIn) { alert("Inicia sesión para ver tus métodos de pago 🍗"); setProfileScreen('auth'); }
+        else { setProfileScreen('payments'); }
+      } else if (optionId === 'direccion') {
+        if (!isLoggedIn) { alert("Inicia sesión para ver tus direcciones de delivery 🍗"); setProfileScreen('auth'); }
+        else { setProfileScreen('addresses'); }
+      } else if (optionId === 'faq') {
+        setProfileScreen('faq');
+      } else if (optionId === 'privacidad') {
+        setProfileScreen('privacy');
+      } 
+      // --- NUEVAS RUTAS CONECTADAS DE HOY ---
+      else if (optionId === 'edit_profile') {
+        setProfileScreen('edit_profile');
+      } else if (optionId === 'notificaciones') {
+        setProfileScreen('notifications');
       } else {
         alert(`Abriendo: ${optionId}`);
       }
     };
 
-    if (document.startViewTransition) {
-      document.startViewTransition(transition);
-    } else {
-      transition();
+    if (document.startViewTransition) { document.startViewTransition(transition); }
+    else { transition(); }
+  };
+
+  // NUEVA FUNCIÓN: Recarga el perfil de forma asíncrona y segura
+  const reloadProfile = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await handleAuthChange(session);
+      }
+    } catch (err) {
+      console.error("Error al recargar perfil:", err.message);
     }
   };
 
-  // NAVEGACIÓN SEMÁNTICA POR VOZ (CON BUG SOLUCIONADO)
+  const [isGlobalListening, setIsGlobalListening] = useState(false);
+  const recognitionRef = useRef(null); // <-- Referencia para controlar el micrófono activo
+  
+  // --- ASISTENTE DE VOZ GLOBAL INTELIGENTE (MULTI-ACCIÓN) ---
   const handleGlobalVoiceAssistant = () => {
+    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return alert("Navegador no compatible");
 
+    // CORRECCIÓN: Si el usuario pulsa el micrófono mientras ya está escuchando, actúa como un interruptor de apagado
+    if (isGlobalListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort(); // Detiene y libera el micrófono de inmediato
+      }
+      setIsGlobalListening(false);
+      return;
+    }
+
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-PE';
+    recognitionRef.current = recognition; // Guardamos la referencia activa para poder controlarla
+
     recognition.start();
     setIsGlobalListening(true);
 
     recognition.onresult = async (event) => {
       const transcript = event.results[0][0].transcript;
       setIsGlobalListening(false);
-      
       try {
-        const response = await fetch('http://127.0.0.1:8000/api/intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: transcript }),
-        });
-
+        const response = await fetch('https://norkys-backend.onrender.com/api/intent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: transcript }) });
+        
         if (!response.ok) throw new Error("Error en el backend");
+        
         const data = await response.json();
 
+        // 1. EJECUTAR ACCIÓN: NAVEGACIÓN
         if (data.action === 'navigate') {
           if (data.target === 'accessibility') {
-            // FIX DEL BUG: Entra a accesibilidad directo
             setSelectedProduct(null);
             setActiveTab('User');
             setProfileScreen('accessibility');
           } else {
             handleTabChange(data.target);
           }
-          
-          const utterance = new SpeechSynthesisUtterance(data.message);
-          utterance.lang = 'es-PE';
-          window.speechSynthesis.speak(utterance);
-        } else {
-          alert("No entendí.");
+        } 
+        
+        // 2. EJECUTAR ACCIÓN: AJUSTES VISUALES (ACCESIBILIDAD)
+        else if (data.action === 'adjust_accessibility') {
+          setAccessibility(prev => {
+            let next = { ...prev };
+            if (data.target === 'textSize') {
+              next.textSize = data.value === 'increase' ? Math.min(4, prev.textSize + 1) : Math.max(1, prev.textSize - 1);
+            } else if (data.target === 'contrast') {
+              next.contrast = prev.contrast === 4 ? 1 : prev.contrast + 1;
+            } else if (data.target === 'dyslexia') {
+              next.dyslexia = !prev.dyslexia;
+            } else if (data.target === 'headCursor') {
+              next.headCursor = !prev.headCursor;
+            }
+            return next;
+          });
+        } 
+        
+        // 3. EJECUTAR ACCIÓN: AGREGAR AL CARRITO DIRECTO
+        else if (data.action === 'add_to_cart') {
+          if (!isLoggedIn) {
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance("Necesitas iniciar sesión para usar el carrito. Te llevo al perfil."));
+            handleTabChange('User');
+            setProfileScreen('auth');
+            return;
+          }
+
+          // Buscar coincidencia semántica en los productos de la BD
+          const matchedProd = productos.find(p => 
+            p.nombre.toLowerCase().includes(data.target.toLowerCase())
+          );
+
+          if (matchedProd) {
+            handleAddToCart({
+              producto: matchedProd,
+              cantidad: parseInt(data.value) || 1,
+              complements: [],
+              aditivos: []
+            });
+          } else {
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance("Lo siento, no encontré ese producto en la carta."));
+            return;
+          }
         }
 
-      } catch (err) {
-        console.error("Error:", err);
+        // Hablarle de vuelta al usuario para confirmar lo realizado
+        const utterance = new SpeechSynthesisUtterance(data.message);
+        utterance.lang = language === 'en' ? 'en-US' : 'es-PE'; 
+        window.speechSynthesis.speak(utterance);
+
+      } catch (err) { 
+        console.error(err); 
       }
     };
 
-    recognition.onerror = () => setIsGlobalListening(false);
-    recognition.onend = () => setIsGlobalListening(false);
-  };
+    // Si ocurre un error, liberamos el micrófono de forma segura
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error:", event.error);
+      setIsGlobalListening(false);
+    };
 
-  const [isGlobalListening, setIsGlobalListening] = useState(false);
+    // Al terminar de hablar, limpiamos la referencia
+    recognition.onend = () => {
+      setIsGlobalListening(false);
+      recognitionRef.current = null;
+    };
+  };
 
   const renderBottomNav = () => (
     <div 
-      style={{ backgroundColor: brandColor }}
-      className="fixed bottom-0 w-full max-w-[450px] rounded-t-[40px] h-[80px] flex justify-between items-center px-10 z-[60] shadow-2xl left-1/2 -translate-x-1/2 transition-colors duration-500"
+      style={{ backgroundColor: brandColor, height: '80px', paddingLeft: '40px', paddingRight: '40px' }}
+      className="fixed bottom-0 w-full max-w-[450px] rounded-t-[40px] flex justify-between items-center px-10 z-[60] shadow-2xl left-1/2 -translate-x-1/2 transition-colors duration-500"
     >
       <Home className={`cursor-pointer transition-all ${activeTab === 'Home' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Home')}/>
-      <Heart className={`cursor-pointer transition-all ${activeTab === 'Fav' ? 'text-white scale-110' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Fav')}/>
-      <div className="w-12"></div>
-      <ShoppingCart className={`cursor-pointer transition-all ${activeTab === 'Cart' ? 'text-white scale-110' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Cart')}/>
+      <Heart className={`cursor-pointer transition-all ${activeTab === 'Fav' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Fav')}/>
+      <div style={{ width: '48px' }}></div> 
+      <ShoppingCart className={`cursor-pointer transition-all ${activeTab === 'Cart' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Cart')}/>
       <User className={`cursor-pointer transition-all ${activeTab === 'User' ? 'text-white scale-110' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('User')}/>
-
-      <div className="absolute left-1/2 -translate-x-1/2 -top-8">
-        <button 
-          onClick={handleGlobalVoiceAssistant}
-          style={{ 
-            backgroundColor: isGlobalListening ? '#ef4444' : brandColor,
-            borderColor: '#FDFBF7', 
-            width: '76px', 
-            height: '76px' 
-          }}
-          className={`rounded-full flex items-center justify-center border-[8px] shadow-xl active:scale-90 transition-all duration-500 ${isGlobalListening ? 'animate-pulse' : ''}`}
-        >
-          <Mic className="text-white" size={32} />
-        </button>
+      <div className="absolute left-1/2 -translate-x-1/2" style={{ top: '-32px' }}>
+        <button onClick={handleGlobalVoiceAssistant} style={{ backgroundColor: isGlobalListening ? '#ef4444' : brandColor, borderColor: '#FDFBF7', width: '76px', height: '76px' }} className={`rounded-full flex items-center justify-center border-[8px] shadow-xl active:scale-90 transition-all duration-500 ${isGlobalListening ? 'animate-pulse' : ''}`}><Mic className="text-white" size={32} /></button>
       </div>
     </div>
   );
@@ -323,179 +470,172 @@ export default function App() {
         <ProductDetail 
           producto={selectedProduct} 
           onBack={handleBackToHome} 
+          onAddToCart={handleAddToCart}
+          isLoggedIn={isLoggedIn}
+          onNavigateToAuth={() => {
+            setSelectedProduct(null);
+            setActiveTab('User');
+            setProfileScreen('auth');
+          }}
         />
       ) : (
         <>
           {activeTab === 'Home' && (
-            <>
-              {/* Header */}
-              <header className="pt-8 px-6 pb-4 flex justify-between items-center bg-[#FDFBF7] z-10 shrink-0">
-                <div className="flex-1 text-center pl-10">
-                  <h1 
-                    className="text-4xl font-bold italic transition-colors duration-500" 
-                    style={{ fontFamily: 'cursive', color: brandColor }}
-                  >
-                    Norky's
-                  </h1>
-                  <p className="text-gray-400 text-[10px] uppercase tracking-widest font-bold">Sabor Inigualable</p>
-                </div>
-                <div 
-                  onClick={() => handleTabChange('User')}
-                  style={{ borderColor: brandColor }}
-                  className="w-[40px] h-[40px] rounded-full flex items-center justify-center text-white font-bold shadow-lg text-sm border-2 shrink-0 cursor-pointer overflow-hidden transition-colors duration-500"
-                >
-                  {isLoggedIn ? <img src={userData?.foto} className="w-full h-full object-cover" /> : 'US'}
-                </div>
-              </header>
-
-              {/* Buscador */}
-              <div className="px-6 flex gap-3 mb-4 shrink-0">
-                <div className={`flex-1 bg-white rounded-2xl shadow-sm px-4 py-3 flex items-center gap-3 border-2 transition-all ${isListening ? 'border-red-400 ring-4 ring-red-50' : 'border-transparent'}`}>
-                  <Search className="text-gray-400" size={20} />
-                  <input 
-                    type="text" 
-                    placeholder={isListening ? "Escuchando..." : "Buscar pollo..."}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full outline-none bg-transparent text-gray-700 font-medium" 
-                  />
-                  <Mic 
-                    onClick={startSpeechRecognition}
-                    className={`cursor-pointer transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-gray-400'}`} 
-                    size={20} 
-                  />
-                </div>
-                <button 
-                  onClick={() => setShowFilters(true)} 
-                  style={{ backgroundColor: brandColor }}
-                  className="p-3 rounded-2xl text-white shadow-lg active:scale-90 transition-colors duration-500 shrink-0"
-                >
-                  <SlidersHorizontal size={24} />
-                </button>
-              </div>
-
-              {/* Categorías */}
-              <div className="px-6 flex gap-3 overflow-x-auto pb-4 no-scrollbar shrink-0">
-                {['Todo', 'Combos', 'Complementos', 'Ofertas'].map((cat) => (
-                  <button 
-                    key={cat} 
-                    onClick={() => handleCategoryChange(cat)}
-                    style={{ 
-                      backgroundColor: activeCategory === cat ? brandColor : '#ffffff',
-                      color: activeCategory === cat ? '#ffffff' : '#9ca3af',
-                      borderColor: activeCategory === cat ? brandColor : '#f3f4f6'
-                    }}
-                    className="px-6 py-2 rounded-xl font-bold transition-all shadow-sm border whitespace-nowrap"
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              {/* Grid de Productos */}
-              <div className="px-6 grid grid-cols-2 gap-4 overflow-y-auto no-scrollbar pb-32 items-start content-start">
-                {productosFiltrados.map((prod) => (
-                  <div 
-                    key={prod.id} 
-                    onClick={() => handleProductClick(prod)} 
-                    className="bg-white p-3 rounded-[2.5rem] shadow-sm flex flex-col relative border border-gray-50 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-gray-200/60 hover:scale-[1.02] active:-translate-y-1.5 active:shadow-xl active:scale-[1.02] group w-full cursor-pointer h-auto"
-                  >
-                    <div className="h-[120px] w-full bg-gray-50 rounded-[2rem] mb-3 overflow-hidden shrink-0">
-                       <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-cover" />
-                    </div>
-                    
-                    <div className="min-h-fit flex flex-col flex-grow">
-                        <h3 className="font-bold text-gray-800 text-[13px] leading-tight px-1">{prod.nombre}</h3>
-                        <p className="text-[10px] text-gray-400 leading-tight mt-1 px-1">{prod.descripcion}</p>
-                    </div>
-                    
-                    <div className="flex justify-between items-center mt-3 px-1 pt-2 border-t border-gray-50 shrink-0">
-                      <span style={{ color: brandColor }} className="font-black text-sm transition-colors duration-500">S/ {prod.precio.toFixed(2)}</span>
-                      <div className="flex items-center gap-1 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100">
-                        <Star className="text-orange-400" size={10} fill="currentColor" />
-                        <span className="text-[10px] font-bold text-orange-700">{prod.rating}</span>
-                      </div>
-                    </div>
-
-                    <button 
-                      onClick={(e) => toggleFavorite(e, prod.id)}
-                      className="absolute top-5 right-5 bg-white/90 backdrop-blur-md p-2 rounded-full shadow-md z-20 border border-gray-100 hover:bg-white"
-                    >
-                      <Heart 
-                        size={14} 
-                        className={favorites.includes(prod.id) ? "fill-red-500 text-red-500" : "text-gray-300"} 
-                      />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Modal de Filtros */}
-              {showFilters && (
-                <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center px-4 pb-10">
-                  <div className="bg-white w-full max-w-md rounded-[3rem] p-8 relative">
-                     <button onClick={() => setShowFilters(false)} className="absolute top-6 right-6 text-gray-400 p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20}/></button>
-                     <h2 className="text-2xl font-bold mb-6 text-gray-800">Ordenar por</h2>
-                     <div className="space-y-3">
-                       <button onClick={() => { setShowFilters(false); }} className="w-full text-left p-4 bg-gray-50 rounded-2xl font-bold text-gray-700 hover:bg-[#E8F5E9] hover:text-[#2E7D32] transition-colors">Menos a más precio</button>
-                       <button onClick={() => { setShowFilters(false); }} className="w-full text-left p-4 bg-gray-50 rounded-2xl font-bold text-gray-700 hover:bg-[#E8F5E9] hover:text-[#2E7D32]">Mayor a menor precio</button>
-                       <button onClick={() => { setShowFilters(false); }} className="w-full text-left p-4 bg-gray-50 rounded-2xl font-bold text-gray-700 hover:bg-[#E8F5E9] hover:text-[#2E7D32]">Mejor Rating ⭐</button>
-                     </div>
-                  </div>
-                </div>
-              )}
-            </>
+            <HomeContent 
+              productosFiltrados={productosFiltrados}
+              activeCategory={activeCategory}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              isListening={isListening}
+              handleCategoryChange={handleCategoryChange}
+              handleProductClick={handleProductClick}
+              toggleFavorite={toggleFavorite}
+              favorites={favorites}
+              startSpeechRecognition={startSpeechRecognition}
+              showFilters={showFilters}       
+              setShowFilters={setShowFilters} 
+              onSortChange={setSortBy} 
+              brandColor={brandColor}
+              isLoggedIn={isLoggedIn}
+              userData={userData}
+              onAvatarClick={() => handleTabChange('User')}
+            />
           )}
 
           {activeTab === 'User' && (
             <>
-              {profileScreen === 'menu' && (
-                /* ================= PERFIL: MENÚ DE OPCIONES ================= */
+              {profileScreen === 'menu' ? (
                 <Profile 
-                  isLoggedIn={isLoggedIn}
-                  user={userData}
-                  onLogin={() => setProfileScreen('auth')} // <-- ABRE LA PANTALLA DE LOGIN
-                  onLogout={handleLogout} // <-- LLAMA AL SIGN OUT REAL DE SUPABASE
-                  onBack={handleBackToHome}
-                  onNavigate={handleProfileNavigation}
+                  isLoggedIn={isLoggedIn} 
+                  user={userData} 
+                  onLogin={() => setProfileScreen('auth')} 
+                  onLogout={handleLogout} 
+                  onBack={handleBackToHome} 
+                  onNavigate={handleProfileNavigation} 
                 />
-              )}
-              
-              {profileScreen === 'accessibility' && (
-                /* ================= PERFIL: PESTAÑA ACCESIBILIDAD ================= */
+              ) : profileScreen === 'accessibility' ? (
                 <Accessibility 
-                  settings={accessibility}
-                  onChange={setAccessibility}
+                  settings={accessibility} 
+                  onChange={setAccessibility} 
+                  onBack={() => setProfileScreen('menu')} 
+                  brandColor={brandColor}
+                  onNavigateToCalibration={() => setProfileScreen('calibration')}
+                  idioma={language}      // <-- ENVIADO IDIOMA GLOBAL
+                  setIdioma={setLanguage} // <-- ENVIADO CONFIGURADOR GLOBAL
+                />
+              ) : profileScreen === 'orders' ? (
+                /* ================= PERFIL: PESTAÑA HISTORIAL PEDIDOS (NUEVO) ================= */
+                <OrderHistory 
+                  isLoggedIn={isLoggedIn}
                   onBack={() => setProfileScreen('menu')}
                   brandColor={brandColor}
+                  idioma={language}
                 />
-              )}
-
-              {profileScreen === 'auth' && (
-                /* ================= PERFIL: PESTAÑA LOGIN/SIGNUP (NUEVO) ================= */
-                <Auth 
+              ) : profileScreen === 'addresses' ? (
+                /* ================= PERFIL: PESTAÑA DIRECCIONES CON MAPA (NUEVO) ================= */
+                <SavedAddresses 
+                  isLoggedIn={isLoggedIn} 
+                  onBack={() => setProfileScreen('menu')} 
+                  brandColor={brandColor} 
+                  idioma={language} 
+                />
+              ) : profileScreen === 'payments' ? (
+                /* ================= PERFIL: PESTAÑA METODOS DE PAGO (NUEVO) ================= */
+                <SavedPayments 
+                  onBack={() => setProfileScreen('menu')} 
+                  brandColor={brandColor} 
+                  idioma={language} 
+                  defaultPayment={defaultPaymentMethod} // <-- PREFERENCIA ACTUAL
+                  onDefaultPaymentChange={setDefaultPaymentMethod} // <-- CONFIGURADOR GLOBAL
+                />
+              ) : profileScreen === 'faq' ? (
+                /* ================= PERFIL: PESTAÑA PREGUNTAS FRECUENTES (NUEVO) ================= */
+                <Faq 
+                  onBack={() => setProfileScreen('menu')} 
+                  brandColor={brandColor} 
+                  idioma={language} 
+                />
+              ) : profileScreen === 'privacy' ? (
+                /* ================= PERFIL: PESTAÑA POLITICA DE PRIVACIDAD (NUEVO) ================= */
+                <PrivacyPolicy 
+                  onBack={() => setProfileScreen('menu')} 
+                  brandColor={brandColor} 
+                  idioma={language} 
+                />
+              ) : profileScreen === 'edit_profile' ? (
+                /* ================= PERFIL: PESTAÑA EDITAR PERFIL REAL (NUEVO) ================= */
+                <EditProfile 
                   onBack={() => setProfileScreen('menu')}
-                  onAuthSuccess={() => setProfileScreen('menu')} // Redirige al perfil al loguearse con éxito
+                  onProfileUpdate={reloadProfile} // <-- CORREGIDO: Ahora llama a la función asíncrona segura
+                  onLogout={handleLogout}
+                  brandColor={brandColor}
+                  idioma={language}
+                />
+              ) : profileScreen === 'notifications' ? (
+                /* ================= PERFIL: PESTAÑA AJUSTES NOTIFICACIONES (NUEVO) ================= */
+                <NotificationSettings 
+                  onBack={() => setProfileScreen('menu')}
+                  brandColor={brandColor}
+                  idioma={language}
+                />
+              ) : (
+                <Auth 
+                  onBack={() => setProfileScreen('menu')} 
+                  onAuthSuccess={() => setProfileScreen('menu')} 
                 />
               )}
             </>
           )}
 
           {activeTab === 'Fav' && (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-              <Heart size={48} className="mb-2" />
-              <p className="font-bold">Aquí verás tus favoritos</p>
-            </div>
+            <Favorites productos={productos} favorites={favorites} onProductClick={handleProductClick} onToggleFavorite={toggleFavorite} brandColor={brandColor} />
           )}
 
           {activeTab === 'Cart' && (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-              <ShoppingCart size={48} className="mb-2" />
-              <p className="font-bold">Tu carrito está vacío</p>
-            </div>
+            <Cart 
+              cart={cart}
+              onRemoveItem={(id) => setCart(prev => prev.filter(item => item.producto.id !== id))}
+              onClearCart={() => setCart([])}
+              onBackToHome={handleBackToHome}
+              brandColor={brandColor}
+              defaultPayment={defaultPaymentMethod} // <-- PASADA LA PREFERENCIA DE PAGO GLOBAL
+            />
           )}
         </>
       )}
+
+      {/* ================= PANTALLA DE ESCUCHANDO IA (NUEVO) ================= */}
+      {isGlobalListening && (
+        <VoiceAssistantOverlay brandColor={brandColor} />
+      )}
+
+      {/* ================= CURSOR DE CABEZA FLOTANTE ================= */}
+      {accessibility.headCursor && (
+        <div 
+          style={{ 
+            left: `${cursorPos.x}px`, 
+            top: `${cursorPos.y}px`,
+            width: '28px',
+            height: '28px',
+            borderColor: brandColor
+          }}
+          className="fixed -translate-x-1/2 -translate-y-1/2 rounded-full border-4 bg-white/20 backdrop-blur-sm pointer-events-none z-[9999] shadow-xl transition-all duration-75 animate-pulse"
+        />
+      )}
+
+      {/* ================= CONTROLADOR INTELIGENTE DE ACCIONES (NUEVO) ================= */}
+      <DwellController 
+        isActive={accessibility.headCursor}
+        cursorPos={cursorPos}
+        brandColor={brandColor}
+      />
+
+      {/* Componente silencioso que procesa la cámara */}
+      <HeadCursorTracker 
+        isActive={accessibility.headCursor} 
+        calibrationData={calibrationData} 
+        onUpdateCursor={setCursorPos} 
+      />
 
       {renderBottomNav()}
     </div>

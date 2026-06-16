@@ -1,10 +1,11 @@
-import { useState } from 'react';
 import { ChevronLeft, Type, Contrast, Baseline, RefreshCw } from 'lucide-react';
+import { translations } from '../../utils/translations'; // <-- IMPORTADO
 
-export default function Accessibility({ settings, onChange, onBack, brandColor }) {
-  const [idioma, setIdioma] = useState('es');
+export default function Accessibility({ settings, onChange, onBack, brandColor, onNavigateToCalibration, idioma, setIdioma }) {
+  
+  // Obtenemos las traducciones correspondientes
+  const t = translations[idioma];
 
-  // Helper con medidas fijas en PX para evitar que las barras se deformen
   const renderSegments = (levels, current) => {
     return (
       <div className="flex gap-1 shrink-0">
@@ -13,7 +14,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
           return (
             <div
               key={i}
-              style={{ width: '28px', height: '8px' }} // Medida fija en px
+              style={{ width: '28px', height: '8px' }}
               className={`rounded-sm transition-all ${isActive ? 'bg-[#3E3432]' : 'bg-gray-200'}`}
             />
           );
@@ -47,7 +48,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
       lineSpacing: 1,
       headCursor: false
     });
-    setIdioma('es');
+    setIdioma('es'); // Reinicia a español
   };
 
   return (
@@ -57,18 +58,18 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
       <div className="pt-8 px-6 flex items-center shrink-0">
         <button 
           onClick={onBack}
-          className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-md text-gray-800 hover:bg-white active:scale-95 transition-all border border-gray-100"
+          className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-md text-gray-800 border border-gray-100"
         >
           <ChevronLeft size={24} />
         </button>
         <h2 className="flex-1 text-center pr-10 text-2xl font-black text-gray-800 tracking-wider">
-          ACCESIBILIDAD
+          {t.accesibilidad.toUpperCase()}
         </h2>
       </div>
 
       {/* Idioma */}
       <div className="px-6 mt-6 shrink-0">
-        <h3 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">Idioma:</h3>
+        <h3 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">{t.idioma}</h3>
         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
           
           <button onClick={() => setIdioma('es')} className="flex items-center justify-between w-full">
@@ -86,7 +87,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
           <button onClick={() => setIdioma('en')} className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
               <span className="text-sm font-black text-gray-400 bg-gray-100 p-2 rounded-lg">EN</span>
-              <span className="font-bold text-gray-700">Inglés</span>
+              <span className="font-bold text-gray-700">English</span>
             </div>
             {idioma === 'en' && (
               <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold">✓</div>
@@ -97,7 +98,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
 
       {/* Preferencias */}
       <div className="px-6 mt-6 shrink-0">
-        <h3 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">Preferencias (Presiona la fila):</h3>
+        <h3 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">{t.preferencias}</h3>
         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
           
           {/* Fila Tamaño de Texto */}
@@ -107,7 +108,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
           >
             <div className="flex items-center gap-3">
               <div className="text-gray-700"><Type size={22} strokeWidth={2.5} /></div>
-              <span className="font-bold text-gray-700 text-[15px]">Tamaño de Texto</span>
+              <span className="font-bold text-gray-700 text-[15px]">{t.tamanoTexto}</span>
             </div>
             {renderSegments(4, settings.textSize)}
           </div>
@@ -121,7 +122,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
           >
             <div className="flex items-center gap-3">
               <div className="text-gray-700"><Contrast size={22} strokeWidth={2.5} /></div>
-              <span className="font-bold text-gray-700 text-[15px]">Contrastes / Daltonismo</span>
+              <span className="font-bold text-gray-700 text-[15px]">{t.contrastes}</span>
             </div>
             {renderSegments(4, settings.contrast)}
           </div>
@@ -135,7 +136,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
           >
             <div className="flex items-center gap-3">
               <span className="font-black text-gray-700 text-lg leading-none tracking-tighter w-6">AZ</span>
-              <span className="font-bold text-gray-700 text-[15px]">Dislexia Amigable</span>
+              <span className="font-bold text-gray-700 text-[15px]">{t.dislexia}</span>
             </div>
             {renderSegments(2, settings.dyslexia ? 2 : 1)}
           </div>
@@ -149,7 +150,7 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
           >
             <div className="flex items-center gap-3">
               <div className="text-gray-700"><Baseline size={22} strokeWidth={2.5} /></div>
-              <span className="font-bold text-gray-700 text-[15px]">Interlineado</span>
+              <span className="font-bold text-gray-700 text-[15px]">{t.interlineado}</span>
             </div>
             {renderSegments(3, settings.lineSpacing)}
           </div>
@@ -164,30 +165,34 @@ export default function Accessibility({ settings, onChange, onBack, brandColor }
           className="flex items-center gap-2 bg-white rounded-full px-8 py-3.5 shadow-md border border-gray-100 font-bold text-gray-700 active:scale-95 transition-transform"
         >
           <RefreshCw size={18} className="text-gray-500" />
-          Restablecer
+          {t.restablecer}
         </button>
       </div>
 
-      {/* Switch Cabeza Blindado en PX */}
+      {/* Switch Cabeza */}
       <div className="px-6 mt-6 shrink-0 pb-10">
         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-6 flex items-center justify-between">
           <p className="font-bold text-gray-700 leading-tight pr-6">
-            Cursor con movimiento de cabeza
+            {t.cabeza}
           </p>
           <button 
             onClick={(e) => {
               e.stopPropagation();
-              onChange({ ...settings, headCursor: !settings.headCursor });
+              if (!settings.headCursor) {
+                onNavigateToCalibration();
+              } else {
+                onChange({ ...settings, headCursor: false });
+              }
             }}
             style={{ 
               backgroundColor: settings.headCursor ? brandColor : '#d1d5db',
-              width: '56px', // Blindado en PX
-              height: '32px'  // Blindado en PX
+              width: '56px',
+              height: '32px'
             }}
             className="rounded-full p-1 transition-colors duration-300 flex justify-start shrink-0 cursor-pointer"
           >
             <div 
-              style={{ width: '24px', height: '24px' }} // Blindado en PX
+              style={{ width: '24px', height: '24px' }}
               className={`bg-white rounded-full shadow-md transition-all ${settings.headCursor ? 'translate-x-6' : 'translate-x-0'}`} 
             />
           </button>
