@@ -13,18 +13,26 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
       return;
     }
 
-    // 1. --- SCROLL AUTOMÁTICO POR BORDES DE LA PANTALLA (DWELL SCROLL DEFINITIVO) ---
-    // Busca cualquier contenedor activo que tenga nuestra clase personalizada
-    const scrollableGrid = document.querySelector('.scroll-container-norkys');
-    if (scrollableGrid) {
-      // SI EL CURSOR ESTÁ EN EL 18% SUPERIOR DE LA PANTALLA -> DESLIZA ARRIBA
-      if (cursorPos.y < window.innerHeight * 0.18) {
-        scrollableGrid.scrollBy({ top: -12, behavior: 'auto' });
+    // 1. --- LOGICA DE CONTROL DE ZONAS (EVITA TRABAS Y CLICS FALSOS) ---
+    // Determinamos si el cursor se encuentra en la zona de scroll superior o inferior
+    const isScrollUpZone = cursorPos.y < window.innerHeight * 0.18;
+    const isScrollDownZone = cursorPos.y > window.innerHeight * 0.65 && cursorPos.y < window.innerHeight - 85;
+
+    if (isScrollUpZone || isScrollDownZone) {
+      // SI ESTÁ EN ZONA DE SCROLL -> CANCELAMOS CUALQUIER CLICK ACTIVADO AL INSTANTE
+      // Esto evita que se trabe o intente clicar botones de la barra inferior o cabecera
+      resetDwell();
+
+      // Ejecutamos el scroll de la carta de pollos de forma directa y fluida
+      const scrollableGrid = document.querySelector('.scroll-container-norkys');
+      if (scrollableGrid) {
+        if (isScrollUpZone) {
+          scrollableGrid.scrollBy({ top: -12, behavior: 'auto' });
+        } else {
+          scrollableGrid.scrollBy({ top: 12, behavior: 'auto' });
+        }
       }
-      // SI ESTÁ EN LA ZONA BAJA (JUSTO POR ENCIMA DE LA BARRA VERDE DE 80PX) -> DESLIZA ABAJO
-      else if (cursorPos.y > window.innerHeight * 0.65 && cursorPos.y < window.innerHeight - 85) {
-        scrollableGrid.scrollBy({ top: 12, behavior: 'auto' });
-      }
+      return; // Bypasseamos toda la lógica de clics para este frame
     }
 
     // 2. --- CLIC POR PERMANENCIA CON TOLERANCIA DE TEMBLORES ---

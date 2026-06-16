@@ -10,7 +10,7 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
   const streamRef = useRef(null);
   const activeNoseCoords = useRef([]);
 
-  // CARGAR LIBRERÍAS DE GOOGLE POR CDN DINÁMICAMENTE (Evita errores de Vite)
+  // Cargar dependencias de Google MediaPipe
   const loadScript = (src) => {
     return new Promise((resolve, reject) => {
       if (document.querySelector(`script[src="${src}"]`)) return resolve();
@@ -23,10 +23,18 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     });
   };
 
-  const startCamera = async () => {
-    try {
-      setStatus('scanning');
+  // ENCENDER CÁMARA AUTOMÁTICAMENTE AL MONTAR EL COMPONENTE
+  useEffect(() => {
+    startPreviewCamera();
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
+  const startPreviewCamera = async () => {
+    try {
       // 1. Cargar dependencias de Google MediaPipe
       await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
       await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js');
@@ -40,19 +48,19 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         
-        // 3. Inicializar MediaPipe FaceMesh
+        // 3. Inicializar el renderizado del rostro
         initFaceMesh();
       }
     } catch (err) {
-      console.error("Error al iniciar cámara o IA:", err);
-      alert("Por favor, permite el acceso a la cámara.");
-      setStatus('idle');
+      console.error("Error al iniciar cámara:", err);
+      alert("Por favor, permite el acceso a la cámara para la vista previa.");
     }
   };
 
   const initFaceMesh = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
+    if (!video || !canvas) return;
     const ctx = canvas.getContext('2d');
 
     const faceMesh = new window.FaceMesh({
@@ -67,28 +75,26 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     });
 
     faceMesh.onResults((results) => {
-      // Dibujar feedback visual en caliente
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (results.multiFaceLandmarks && results.multiFaceLandmarks[0]) {
         const landmarks = results.multiFaceLandmarks[0];
+        const nose = landmarks[4]; // Punta de la nariz
         
-        // El punto 4 de MediaPipe es la punta de la nariz
-        const nose = landmarks[4];
-        
-        // Guardamos las coordenadas para calibrar
-        if (status === 'scanning' && countdown !== null) {
+        // Capturar coordenadas de calibración solo en fase de escaneo activo
+        // El estado 'scanning-active' se activa al pulsar el botón
+        if (activeNoseCoords.current && activeNoseCoords.current.active) {
           activeNoseCoords.current.push({ x: nose.x, y: nose.y });
         }
 
-        // --- DIBUJAR PUNTOS DE RECONOCIMIENTO (BRUTAL PARA EXPONER) ---
+        // --- FEEDBACK VISUAL DE LOS PUNTOS FACIALES ---
         ctx.fillStyle = brandColor;
         // Nariz
         ctx.beginPath();
         ctx.arc(nose.x * canvas.width, nose.y * canvas.height, 5, 0, 2 * Math.PI);
         ctx.fill();
 
-        // Ojo izquierdo (Punto 33) y derecho (Punto 263)
+        // Ojos
         const leftEye = landmarks[33];
         const rightEye = landmarks[263];
         ctx.beginPath();
@@ -98,7 +104,6 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
       }
     });
 
-    // Enlazamos la cámara con MediaPipe
     const camera = new window.Camera(video, {
       onFrame: async () => {
         await faceMesh.send({ image: video });
@@ -108,13 +113,19 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     });
     
     camera.start();
+    setStatus('preview'); // Estado de vista previa lista
+  };
+
+  const triggerCalibrationScan = () => {
+    setStatus('scanning');
+    activeNoseCoords.current = [];
+    activeNoseCoords.current.active = true; // Activa la toma de muestras de la nariz
     startCountdown();
   };
 
   const startCountdown = () => {
     let count = 3;
     setCountdown(count);
-    activeNoseCoords.current = [];
 
     const interval = setInterval(() => {
       count -= 1;
@@ -123,6 +134,7 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
       } else {
         clearInterval(interval);
         setCountdown(null);
+        activeNoseCoords.current.active = false;
         processCalibration();
       }
     }, 1000);
@@ -134,7 +146,7 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     
     let finalNose = { x: 0.5, y: 0.5 }; // Centro por defecto
 
-    if (coords.length > 0) {
+    if (coords && coords.length > 0) {
       const sumXReal = coords.reduce((acc, p) => acc + p.x, 0);
       const sumYReal = coords.reduce((acc, p) => acc + p.y, 0);
       finalNose = { x: sumXReal / coords.length, y: sumYReal / coords.length };
@@ -145,38 +157,32 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     window.speechSynthesis.speak(utterance);
 
     setTimeout(() => {
-      onCalibrationSuccess(finalNose); // Enviamos el punto cero de tu nariz
+      onCalibrationSuccess(finalNose); // Regresa a accesibilidad con el origen
     }, 1500);
   };
 
-  useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
-
   return (
     <div className="flex-1 bg-[#FDFBF7] relative pb-28 flex flex-col overflow-y-auto no-scrollbar animate-in slide-in-from-right duration-300">
+      
+      {/* Cabecera */}
       <div className="pt-8 px-6 flex items-center shrink-0">
-        <button onClick={onBack} className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-md text-gray-800 border border-gray-100"><ChevronLeft size={24} /></button>
+        <button onClick={onBack} className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-md text-gray-800 border border-gray-100 hover:bg-white"><ChevronLeft size={24} /></button>
         <h2 className="flex-1 text-center pr-10 text-2xl font-black text-gray-800 tracking-wider">CALIBRACIÓN</h2>
       </div>
 
-      {/* Recuadro de Cámara con Canvas para ver la IA */}
+      {/* Recuadro de Cámara */}
       <div className="px-8 mt-6 flex justify-center shrink-0">
         <div className="w-[320px] h-[320px] bg-gray-100 border-4 border-gray-200 rounded-[3rem] shadow-xl flex items-center justify-center overflow-hidden relative">
+          
           {status === 'idle' && (
             <div className="flex flex-col items-center text-gray-400 gap-2">
               <Camera size={48} className="animate-pulse" />
-              <span className="font-bold text-xs uppercase tracking-wider">Cámara inactiva</span>
+              <span className="font-bold text-xs uppercase tracking-wider">Iniciando cámara...</span>
             </div>
           )}
           
           <video ref={videoRef} autoPlay playsInline muted className="hidden" />
           
-          {/* Canvas donde dibujamos tu cara con los puntos de MediaPipe */}
           <canvas 
             ref={canvasRef} 
             width={320} 
@@ -203,16 +209,32 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
         <div className="bg-white rounded-[2rem] shadow-md border border-gray-50 p-6">
           <h3 className="font-black text-gray-800 text-sm uppercase tracking-wide mb-3">Instrucciones de IA:</h3>
           <ul className="text-xs text-gray-500 font-bold space-y-2 leading-relaxed">
-            <li>• Centra tu cabeza en el recuadro.</li>
+            <li>• Centra tu cabeza en el recuadro guiándote del video.</li>
             <li>• La IA detectará tus ojos y la punta de tu nariz.</li>
-            <li>• Quédate quieto mirando al frente durante la cuenta.</li>
-            <li>• Cuando estés listo, presiona iniciar.</li>
+            <li>• Presiona el botón para iniciar el escaneo de calibración.</li>
+            <li>• Quédate quieto mirando al frente durante la cuenta de 3 segundos.</li>
           </ul>
-          {status === 'idle' ? (
-            <button onClick={startCamera} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-4 rounded-2xl shadow-lg mt-6 active:scale-95 transition-transform cursor-pointer">INICIAR CALIBRACIÓN</button>
+          
+          {status === 'preview' ? (
+            <button 
+              type="button"
+              onClick={triggerCalibrationScan} 
+              style={{ backgroundColor: brandColor }} 
+              className="w-full text-white font-bold py-4 rounded-2xl shadow-lg mt-6 active:scale-95 transition-transform cursor-pointer"
+            >
+              INICIAR CALIBRACIÓN
+            </button>
+          ) : status === 'scanning' ? (
+            <div className="text-center text-sm font-bold text-gray-400 mt-8 py-3 animate-pulse">
+              Mapeando origen de rostro...
+            </div>
+          ) : status === 'idle' ? (
+            <div className="text-center text-sm font-bold text-gray-400 mt-8 py-3 animate-pulse">
+              Encendiendo cámara...
+            </div>
           ) : (
             <div className="text-center text-sm font-bold text-gray-400 mt-8 py-3 animate-pulse">
-              {status === 'scanning' ? 'Mapeando rostro con MediaPipe...' : 'Redirigiendo...'}
+              Redirigiendo...
             </div>
           )}
         </div>

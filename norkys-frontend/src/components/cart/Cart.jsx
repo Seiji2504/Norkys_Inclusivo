@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, CheckCircle2, Trash2, X, MapPin } from 'lucide-react';
+import { CreditCard, CheckCircle2, Trash2, X, MapPin, ShoppingCart } from 'lucide-react'; // <-- IMPORTADO ShoppingCart DE LUCIDE
 import { supabase } from '../../supabaseClient';
-import { translations } from '../../utils/translations'; // <-- IMPORTADO
+import { translations } from '../../utils/translations'; 
 
 export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, brandColor, defaultPayment, idioma }) {
-  const t = translations[idioma]; // Cargamos las traducciones dinámicas
+  const t = translations[idioma]; 
 
   const [paymentMethod, setPaymentMethod] = useState(defaultPayment || 'efectivo');
   const [showSuccess, setShowSuccess] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Estados para validar direcciones reales de Supabase
   const [direcciones, setDirecciones] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
 
@@ -30,11 +29,11 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
         const { data } = await supabase
           .from('direcciones')
           .select('*')
-          .eq('usuario_id', user.id);
+          .eq('id_usuario', user.id); // Ajustado a tu estructura
         
         setDirecciones(data || []);
         if (data && data.length > 0) {
-          setSelectedAddressId(data[0].id); // Selecciona la primera por defecto
+          setSelectedAddressId(data[0].id); 
         }
       }
     } catch (err) {
@@ -45,7 +44,6 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
   const handlePayNow = async () => {
     if (cart.length === 0) return alert(t.cartVacio);
     
-    // VALIDACIÓN DE DIRECCIÓN EXISTENTE TRADUCIDA
     if (direcciones.length === 0) {
       alert(idioma === 'en' ? "Please add a delivery address in your profile before checking out 🏡" : "Por favor, agrega una dirección de delivery en tu perfil antes de ordenar 🏡");
       return;
@@ -91,7 +89,7 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
 
       if (detallesError) throw detallesError;
 
-      // Lanzar notificación push si está activa
+      // Lanzar notificación push
       const notifSaved = localStorage.getItem('norkys-notifications');
       const notifSettings = notifSaved ? JSON.parse(notifSaved) : { pedidos: true };
 
@@ -121,7 +119,8 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
   if (cart.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 animate-in fade-in scroll-container-norkys">
-        <ShoppingCartIcon size={48} className="mb-2 text-gray-300 animate-pulse" />
+        {/* CORREGIDO: Usamos el ícono oficial de Lucide de forma nativa */}
+        <ShoppingCart size={48} className="mb-2 text-gray-300 animate-pulse" />
         <p className="font-bold text-center">{t.cartVacio}</p>
         <p className="text-xs text-gray-400 text-center mt-1">{t.cartVacioSub}</p>
       </div>
@@ -155,7 +154,6 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
         ))}
       </div>
 
-      {/* SELECTOR DE DIRECCIONES REALES DE SUPABASE */}
       <div className="px-6 shrink-0 mb-4">
         <h3 className="text-xs font-black text-gray-400 mb-2 uppercase tracking-wide">
           {idioma === 'en' ? 'Send to:' : 'Enviar a:'}
@@ -184,7 +182,6 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
         )}
       </div>
 
-      {/* Desglose de Precios */}
       <div className="px-6 shrink-0 mb-4">
         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-50 p-6 flex flex-col gap-3">
           <div className="flex justify-between text-gray-500 font-bold text-sm">
@@ -204,11 +201,9 @@ export default function Cart({ cart, onRemoveItem, onClearCart, onBackToHome, br
             <span>{t.cartTotal}</span>
             <span style={{ color: brandColor }}>S/ {total.toFixed(2)}</span>
           </div>
-          <p className="text-center text-xs text-gray-400 font-bold mt-2">{t.cartTiempo}</p>
         </div>
       </div>
 
-      {/* Métodos de Pago */}
       <div className="px-6 shrink-0 mb-6">
         <h3 className="text-xs font-black text-gray-400 mb-3 uppercase tracking-wider">{t.cartMetodo}</h3>
         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-50 p-6 flex flex-col gap-4">
