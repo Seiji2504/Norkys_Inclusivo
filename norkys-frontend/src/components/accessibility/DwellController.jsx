@@ -7,9 +7,8 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
   const startPosRef = useRef(null); 
   const graceTicksRef = useRef(0);  
 
-  // NUEVAS REFERENCIAS PARA EL BUCLE DE SCROLL CONTINUO
   const scrollTimerRef = useRef(null);
-  const scrollDirectionRef = useRef(0); // -15 para arriba, 15 para abajo, 0 para detenido
+  const scrollDirectionRef = useRef(0); 
 
   useEffect(() => {
     if (!isActive || !cursorPos) {
@@ -18,30 +17,28 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
       return;
     }
 
-    // 1. --- BUCLE DE SCROLL CONTINUO POR BORDES (DWELL SCROLL PRO) ---
-    const isScrollUpZone = cursorPos.y < window.innerHeight * 0.18;
-    const isScrollDownZone = cursorPos.y > window.innerHeight * 0.65 && cursorPos.y < window.innerHeight - 85;
+    // 1. --- BUCLE DE SCROLL CONTINUO POR PORCENTAJES DE PANTALLA ---
+    // Zona superior (20% de arriba) o Zona inferior (28% de abajo, cubre el navbar completo)
+    const isScrollUpZone = cursorPos.y < window.innerHeight * 0.20;
+    const isScrollDownZone = cursorPos.y > window.innerHeight * 0.72;
 
     if (isScrollUpZone || isScrollDownZone) {
-      resetDwell(); // Apagamos clicks para evitar toques falsos al deslizar
+      resetDwell(); // APAGAMOS CLICKS AL SCROLLEAR (Evita falsos clics en el menú inferior)
 
-      // Fijamos la velocidad y dirección del scroll
       scrollDirectionRef.current = isScrollUpZone ? -15 : 15;
 
-      // Si el bucle de scroll continuo no está corriendo, lo iniciamos de inmediato
       if (!scrollTimerRef.current) {
         scrollTimerRef.current = setInterval(() => {
           const scrollableGrid = document.querySelector('.scroll-container-norkys');
           if (scrollableGrid && scrollDirectionRef.current !== 0) {
-            // Desplazamiento continuo en píxeles
-            scrollableGrid.scrollBy({ top: scrollDirectionRef.current, behavior: 'auto' });
+            // CORREGIDO: Usamos mutación scrollTop primitiva que funciona sí o sí en todos los navegadores
+            scrollableGrid.scrollTop += scrollDirectionRef.current;
           }
-        }, 40); // 40 milisegundos = 25 FPS (Fluidez absoluta como seda)
+        }, 40); 
       }
-      return; // Bypasseamos los clicks mientras esté en zona de scroll
+      return; // Bloqueamos la ejecución de clics en este frame
     } else {
-      // Si el cursor sale de la zona de scroll, apagamos el bucle inmediatamente
-      stopScroll();
+      stopScroll(); // Si sale de los bordes, apaga el scroll
     }
 
     // 2. --- CLIC POR PERMANENCIA CON TOLERANCIA DE TEMBLORES ---
@@ -107,7 +104,6 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
     }
   };
 
-  // Función para apagar el temporizador de scroll continuo de forma segura
   const stopScroll = () => {
     scrollDirectionRef.current = 0;
     if (scrollTimerRef.current) {
@@ -116,7 +112,6 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
     }
   };
 
-  // Limpieza absoluta al desmontar el componente
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

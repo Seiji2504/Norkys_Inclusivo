@@ -504,18 +504,56 @@ export default function App() {
     };
   };
 
+  // BARRA DE NAVEGACIÓN BLINDADA (CON BOTONES REALES PARA COMPATIBILIDAD CON CLIC FACIAL)
   const renderBottomNav = () => (
     <div 
       style={{ backgroundColor: brandColor, height: '80px', paddingLeft: '40px', paddingRight: '40px' }}
       className="fixed bottom-0 w-full max-w-[450px] rounded-t-[40px] flex justify-between items-center px-10 z-[60] shadow-2xl left-1/2 -translate-x-1/2 transition-colors duration-500"
     >
-      <Home className={`cursor-pointer transition-all ${activeTab === 'Home' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Home')}/>
-      <Heart className={`cursor-pointer transition-all ${activeTab === 'Fav' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Fav')}/>
+      {/* Botón Home */}
+      <button 
+        onClick={() => handleTabChange('Home')}
+        className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
+      >
+        <Home className={`transition-all ${activeTab === 'Home' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
+      </button>
+
+      {/* Botón Favoritos */}
+      <button 
+        onClick={() => handleTabChange('Fav')}
+        className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
+      >
+        <Heart className={`transition-all ${activeTab === 'Fav' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
+      </button>
+
+      {/* Espacio para micrófono flotante */}
       <div style={{ width: '48px' }}></div> 
-      <ShoppingCart className={`cursor-pointer transition-all ${activeTab === 'Cart' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('Cart')}/>
-      <User className={`cursor-pointer transition-all ${activeTab === 'User' ? 'text-white scale-110' : 'text-white/40'}`} size={24} onClick={() => handleTabChange('User')}/>
+
+      {/* Botón Carrito */}
+      <button 
+        onClick={() => handleTabChange('Cart')}
+        className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
+      >
+        <ShoppingCart className={`transition-all ${activeTab === 'Cart' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
+      </button>
+
+      {/* Botón Perfil */}
+      <button 
+        onClick={() => handleTabChange('User')}
+        className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
+      >
+        <User className={`cursor-pointer transition-all ${activeTab === 'User' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
+      </button>
+
+      {/* Botón central del micrófono */}
       <div className="absolute left-1/2 -translate-x-1/2" style={{ top: '-32px' }}>
-        <button onClick={handleGlobalVoiceAssistant} style={{ backgroundColor: isGlobalListening ? '#ef4444' : brandColor, borderColor: '#FDFBF7', width: '76px', height: '76px' }} className={`rounded-full flex items-center justify-center border-[8px] shadow-xl active:scale-90 transition-all duration-500 ${isGlobalListening ? 'animate-pulse' : ''}`}><Mic className="text-white" size={32} /></button>
+        <button 
+          onClick={handleGlobalVoiceAssistant} 
+          style={{ backgroundColor: isGlobalListening ? '#ef4444' : brandColor, borderColor: '#FDFBF7', width: '76px', height: '76px' }} 
+          className={`rounded-full flex items-center justify-center border-[8px] shadow-xl active:scale-90 transition-all duration-500 ${isGlobalListening ? 'animate-pulse' : ''}`}
+        >
+          <Mic className="text-white" size={32} />
+        </button>
       </div>
     </div>
   );
