@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# Cargar variables de entorno
 load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
@@ -25,61 +24,76 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# NUEVA ESTRUCTURA DE RESPUESTA MULTI-ACCIÓN (Structured Output)
-class VoiceAction(BaseModel):
+# CADA ACCION INDIVIDUAL COMPATIBLE CON TU SISTEMA (Pág 1 a 27)
+class SingleAction(BaseModel):
     action: str = Field(
-        description="Acción a ejecutar. Valores permitidos: 'navigate' (cambiar pestaña), 'adjust_accessibility' (cambiar ajustes visuales), 'add_to_cart' (agregar producto), o 'unknown' (si no se entiende)."
+        description="Acción: 'navigate' (abrir pestaña), 'adjust_accessibility' (cambiar visuales), 'filter' (buscador/carta), 'open_product' (detalle plato), 'add_to_cart' (comprar), 'clear_cart' (vaciar bolsa)"
     )
     target: str = Field(
-        description="Objetivo de la acción. Si action='navigate': 'Home', 'User', 'Fav', 'Cart', 'accessibility'. Si action='adjust_accessibility': 'textSize', 'contrast', 'dyslexia', 'headCursor'. Si action='add_to_cart': Nombre exacto o aproximado del producto (ej. 'Mostrito', 'Medio Brasa', 'Alitas Brasa', 'Norkys Burger')."
+        description="Objetivo de la acción. Si navigate: 'Home', 'User', 'Fav', 'Cart', 'accessibility', 'orders', 'payments', 'addresses', 'notifications', 'faq', 'privacy', 'edit_profile', 'calibration', 'auth'. Si adjust_accessibility: 'textSize', 'contrast', 'dyslexia', 'headCursor'. Si open_product o add_to_cart: Nombre de producto ('Mostrito', 'Medio Brasa', 'Alitas Brasa', 'Norkys Burger'). Si filter: 'category' o 'search'."
     )
     value: str = Field(
-        description="Valor a aplicar. Si es textSize: 'increase' o 'decrease'. Si es contrast: 'cycle'. Si es dyslexia o headCursor: 'toggle'. Si es add_to_cart: Cantidad en texto (ej: '1', '2'). Por defecto: ''."
+        description="Valor. Si target='textSize': 'increase' o 'decrease'. Si target='contrast': 'cycle'. Si target='dyslexia'/'headCursor': 'toggle'. Si target='category': 'Todo', 'Combos', 'Complementos', 'Ofertas'. Si target='search': el texto a buscar. Si add_to_cart: la cantidad (ej. '1')."
+    )
+
+# RESPUESTA MULTI-ACCIÓN DEL ASISTENTE
+class VoiceResponse(BaseModel):
+    actions: list[SingleAction] = Field(
+        description="Lista ordenada de acciones que se deben ejecutar en secuencia."
     )
     message: str = Field(
-        description="Mensaje amigable de confirmación. DEBE estar estrictamente en el mismo idioma (español o inglés) en el que habló el usuario. Ej: 'Entendido, te llevo a la carta' o 'Understood, taking you to the menu.'"
+        description="Mensaje amigable en el mismo idioma del usuario (español o inglés) confirmando de forma inmersiva lo que estás haciendo."
     )
 
 class VoiceInput(BaseModel):
     text: str
 
-@app.post("/api/intent", response_model=VoiceAction)
+@app.post("/api/intent", response_model=VoiceResponse)
 async def process_voice_intent(user_input: VoiceInput):
     try:
-        # Prompt mejorado para entrenar a Gemini en las 3 funciones
+        # Prompt maestro entrenado con el 100% de la arquitectura de tu aplicación
         prompt = f"""
         Analiza el comando de voz del usuario para la pollería inclusiva Norky's.
-        Clasifica la intención en una de las siguientes acciones:
-
+        Clasifica la intención en una o MÚLTIPLES acciones.
+        
         Comando del usuario: "{user_input.text}"
 
-        1. NAVEGACIÓN (action: 'navigate'):
-           - Ir a carta, inicio, combos -> target: 'Home'
-           - Ir a perfil, mi cuenta -> target: 'User'
-           - Ir a favoritos, ver mis corazones -> target: 'Fav'
-           - Ir a bolsa, carrito, pagar -> target: 'Cart'
-           - Ir a configuración, accesibilidad -> target: 'accessibility'
+        CATÁLOGO DE PRODUCTOS: 'Mostrito', 'Medio Brasa', 'Alitas Brasa', 'Norkys Burger'
+        CATEGORÍAS DE LA CARTA: 'Todo', 'Combos', 'Complementos', 'Ofertas'
 
-        2. AJUSTES VISUALES (action: 'adjust_accessibility'):
-           - Agrandar letra, texto más grande -> target: 'textSize', value: 'increase'
-           - Achicar letra, texto más pequeño -> target: 'textSize', value: 'decrease'
-           - Cambiar contraste, modo daltónico -> target: 'contrast', value: 'cycle'
-           - Activar dislexia, fuente amigable -> target: 'dyslexia', value: 'toggle'
-           - Activar cursor, mover con la cabeza -> target: 'headCursor', value: 'toggle'
+        MAPA DE NAVEGACIÓN COMPLETO DE TU SISTEMA (target para action='navigate'):
+        - 'Home': Menú principal / Carta
+        - 'User': Menú principal de Perfil
+        - 'Fav': Historial de Favoritos
+        - 'Cart': Carrito de compras / Resumen de pedido
+        - 'accessibility': Menú de ajustes de Accesibilidad
+        - 'orders': Mis Pedidos (Historial de compras)
+        - 'payments': Métodos de pago (Tarjetas guardadas)
+        - 'addresses': Direcciones de delivery (Mapa satelital)
+        - 'notifications': Notificaciones y Sonidos
+        - 'faq': Preguntas Frecuentes (FAQ)
+        - 'privacy': Política de Privacidad (Ciberseguridad)
+        - 'edit_profile': Formulario de Editar Perfil
+        - 'calibration': Calibración de cámara del cursor facial
+        - 'auth': Formulario de Iniciar Sesión / Registro
 
-        3. COMPRA (action: 'add_to_cart'):
-           - "Agrega un mostrito", "quiero pedir medio pollo", "pon una hamburguesa en mi bolsa"
-           -> target: Nombre del producto (debe coincidir semánticamente con: 'Mostrito', 'Medio Brasa', 'Alitas Brasa' o 'Norkys Burger').
-           -> value: Cantidad especificada por el usuario (ej: '1', '2'). Si no especifica cantidad, por defecto es '1'.
+        ACCIONES COMPONENCIALES SOPORTADAS:
+        A) 'filter' (Filtrado de comida):
+           - "busca hamburguesas" -> [action: 'filter', target: 'search', value: 'Burger']
+           - "muestra los complementos" -> [action: 'filter', target: 'category', value: 'Complementos']
+        B) 'open_product' (Abrir plato):
+           - "quiero ver el mostrito" -> [action: 'open_product', target: 'Mostrito']
+        C) 'clear_cart' (Vaciar carrito):
+           - "limpia mi carrito" -> [action: 'clear_cart']
         """
 
         response = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
+            model="gemini-3.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction="Eres el asistente de voz inteligente de Pollerías Norky's. Tu objetivo es procesar la navegación, accesibilidad y adición al carrito para personas con discapacidad. Responde siempre en el mismo idioma (español o inglés) que usó el usuario.",
+                system_instruction="Eres el asistente de voz inteligente de Pollerías Norky's. Tu objetivo es procesar múltiples acciones de navegación, accesibilidad y adición al carrito para personas con discapacidad en una sola orden. Responde siempre en el mismo idioma que el usuario.",
                 response_mime_type="application/json",
-                response_schema=VoiceAction,
+                response_schema=VoiceResponse,
             ),
         )
 
@@ -87,7 +101,7 @@ async def process_voice_intent(user_input: VoiceInput):
         return json.loads(response.text)
 
     except Exception as e:
-        print("\n--- ERROR ---")
+        print("\n--- ERROR DETECTADO ---")
         print(e)
-        print("--------------\n")
+        print("-----------------------\n")
         raise HTTPException(status_code=500, detail=str(e))
