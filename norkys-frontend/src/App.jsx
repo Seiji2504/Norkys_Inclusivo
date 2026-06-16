@@ -337,9 +337,9 @@ export default function App() {
   const [isGlobalListening, setIsGlobalListening] = useState(false);
   const recognitionRef = useRef(null); // <-- Referencia para controlar el micrófono activo
   
-  // --- ASISTENTE DE VOZ GLOBAL INTELIGENTE (MULTI-ACCIÓN) ---
+  // --- ASISTENTE DE VOZ GLOBAL INTELIGENTE (MULTI-ACCIÓN Y MULTILINGÜE COMPLETO) ---
   const handleGlobalVoiceAssistant = () => {
-    playInteractionFeedback(); // <-- DISPARADO AUDIO/VIBRACIÓN
+    playInteractionFeedback();
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return alert("Navegador no compatible");
 
@@ -363,84 +363,141 @@ export default function App() {
       const transcript = event.results[0][0].transcript;
       setIsGlobalListening(false);
       try {
-        const response = await fetch('https://norkys-backend.onrender.com/api/intent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: transcript }) });
+        const response = await fetch('https://norkys-backend.onrender.com/api/intent', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ text: transcript }) 
+        });
         
         if (!response.ok) throw new Error("Error en el backend");
-        
         const data = await response.json();
 
-        // 1. EJECUTAR ACCIÓN: NAVEGACIÓN
-        if (data.action === 'navigate') {
-          if (data.target === 'accessibility') {
-            setSelectedProduct(null);
-            setActiveTab('User');
-            setProfileScreen('accessibility');
-          } else {
-            handleTabChange(data.target);
-          }
-        } 
-        
-        // 2. EJECUTAR ACCIÓN: AJUSTES VISUALES (ACCESIBILIDAD)
-        else if (data.action === 'adjust_accessibility') {
-          setAccessibility(prev => {
-            let next = { ...prev };
-            if (data.target === 'textSize') {
-              next.textSize = data.value === 'increase' ? Math.min(4, prev.textSize + 1) : Math.max(1, prev.textSize - 1);
-            } else if (data.target === 'contrast') {
-              next.contrast = prev.contrast === 4 ? 1 : prev.contrast + 1;
-            } else if (data.target === 'dyslexia') {
-              next.dyslexia = !prev.dyslexia;
-            } else if (data.target === 'headCursor') {
-              next.headCursor = !prev.headCursor;
+        // EJECUTAMOS EL BUCLE DE ACCIONES SECUENCIALES DETECTADAS POR GEMINI (Multitarea)
+        if (data.actions && data.actions.length > 0) {
+          data.actions.forEach(act => {
+            
+            // 1. ACCIÓN: NAVEGAR A CUALQUIERA DE LAS 14 PANTALLAS DEL SISTEMA
+            if (act.action === 'navigate') {
+              setSelectedProduct(null); // Cerramos el plato si estaba abierto
+
+              if (act.target === 'accessibility') {
+                setActiveTab('User');
+                setProfileScreen('accessibility');
+              } else if (act.target === 'orders') {
+                setActiveTab('User');
+                setProfileScreen('orders');
+              } else if (act.target === 'payments') {
+                setActiveTab('User');
+                setProfileScreen('payments');
+              } else if (act.target === 'addresses') {
+                setActiveTab('User');
+                setProfileScreen('addresses');
+              } else if (act.target === 'notifications') {
+                setActiveTab('User');
+                setProfileScreen('notifications');
+              } else if (act.target === 'faq') {
+                setActiveTab('User');
+                setProfileScreen('faq');
+              } else if (act.target === 'privacy') {
+                setActiveTab('User');
+                setProfileScreen('privacy');
+              } else if (act.target === 'edit_profile') {
+                setActiveTab('User');
+                setProfileScreen('edit_profile');
+              } else if (act.target === 'calibration') {
+                setActiveTab('User');
+                setProfileScreen('calibration');
+              } else if (act.target === 'auth') {
+                setActiveTab('User');
+                setProfileScreen('auth');
+              } else {
+                handleTabChange(act.target); // Home, Fav, Cart
+              }
+            } 
+            
+            // 2. ACCIÓN: AJUSTES VISUALES (ACCESIBILIDAD)
+            else if (act.action === 'adjust_accessibility') {
+              setAccessibility(prev => {
+                let next = { ...prev };
+                if (act.target === 'textSize') {
+                  next.textSize = act.value === 'increase' ? Math.min(4, prev.textSize + 1) : Math.max(1, prev.textSize - 1);
+                } else if (act.target === 'contrast') {
+                  next.contrast = prev.contrast === 4 ? 1 : prev.contrast + 1;
+                } else if (act.target === 'dyslexia') {
+                  next.dyslexia = !prev.dyslexia;
+                } else if (act.target === 'headCursor') {
+                  next.headCursor = !prev.headCursor;
+                }
+                return next;
+              });
+            } 
+            
+            // 3. ACCIÓN: FILTRAR PLATOS DE LA CARTA
+            else if (act.action === 'filter') {
+              if (act.target === 'category') {
+                handleCategoryChange(act.value);
+              } else if (act.target === 'search') {
+                setSearchTerm(act.value);
+              }
             }
-            return next;
+
+            // 4. ACCIÓN: ABRIR UN PLATO ESPECÍFICO (Ir a Detalle)
+            else if (act.action === 'open_product') {
+              const matchedProd = productos.find(p => 
+                p.nombre.toLowerCase().includes(act.target.toLowerCase())
+              );
+              if (matchedProd) {
+                handleProductClick(matchedProd);
+              }
+            }
+
+            // 5. ACCIÓN: AGREGAR AL CARRITO POR VOZ
+            else if (act.action === 'add_to_cart') {
+              if (!isLoggedIn) {
+                window.speechSynthesis.speak(new SpeechSynthesisUtterance("Necesitas iniciar sesión para usar el carrito. Te llevo al perfil."));
+                handleTabChange('User');
+                setProfileScreen('auth');
+                return;
+              }
+
+              const matchedProd = productos.find(p => 
+                p.nombre.toLowerCase().includes(act.target.toLowerCase())
+              );
+
+              if (matchedProd) {
+                handleAddToCart({
+                  producto: matchedProd,
+                  cantidad: parseInt(act.value) || 1,
+                  complements: [],
+                  aditivos: []
+                });
+              }
+            }
+
+            // 6. ACCIÓN: VACIAR EL CARRITO EN CALIENTE
+            else if (act.action === 'clear_cart') {
+              setCart([]);
+            }
+
           });
-        } 
-        
-        // 3. EJECUTAR ACCIÓN: AGREGAR AL CARRITO DIRECTO
-        else if (data.action === 'add_to_cart') {
-          if (!isLoggedIn) {
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance("Necesitas iniciar sesión para usar el carrito. Te llevo al perfil."));
-            handleTabChange('User');
-            setProfileScreen('auth');
-            return;
-          }
-
-          // Buscar coincidencia semántica en los productos de la BD
-          const matchedProd = productos.find(p => 
-            p.nombre.toLowerCase().includes(data.target.toLowerCase())
-          );
-
-          if (matchedProd) {
-            handleAddToCart({
-              producto: matchedProd,
-              cantidad: parseInt(data.value) || 1,
-              complements: [],
-              aditivos: []
-            });
-          } else {
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance("Lo siento, no encontré ese producto en la carta."));
-            return;
-          }
         }
 
-        // Hablarle de vuelta al usuario para confirmar lo realizado
+        // El sintetizador te habla de vuelta en el idioma correcto (Español o Inglés)
         const utterance = new SpeechSynthesisUtterance(data.message);
         utterance.lang = language === 'en' ? 'en-US' : 'es-PE'; 
         window.speechSynthesis.speak(utterance);
 
       } catch (err) { 
-        console.error(err); 
+        console.error("Error en la IA:", err); 
+        alert("El asistente de voz tuvo un problema. Asegúrate de tener encendido tu backend en Python. xd");
       }
     };
 
-    // Si ocurre un error, liberamos el micrófono de forma segura
     recognition.onerror = (event) => {
       console.error("Speech recognition error:", event.error);
       setIsGlobalListening(false);
     };
 
-    // Al terminar de hablar, limpiamos la referencia
     recognition.onend = () => {
       setIsGlobalListening(false);
       recognitionRef.current = null;
@@ -572,11 +629,17 @@ export default function App() {
                   idioma={language}
                 />
               ) : profileScreen === 'notifications' ? (
-                /* ================= PERFIL: PESTAÑA AJUSTES NOTIFICACIONES (NUEVO) ================= */
-                <NotificationSettings 
-                  onBack={() => setProfileScreen('menu')}
+                <NotificationSettings onBack={() => setProfileScreen('menu')} brandColor={brandColor} idioma={language} />
+              ) : profileScreen === 'calibration' ? (
+                /* ================= PERFIL: PESTAÑA CALIBRACIÓN CÁMARA (CORREGIDO Y AGREGADO) ================= */
+                <HeadTrackingCalibration 
                   brandColor={brandColor}
-                  idioma={language}
+                  onBack={() => setProfileScreen('accessibility')}
+                  onCalibrationSuccess={(coords) => {
+                    setCalibrationData(coords);
+                    setAccessibility(prev => ({ ...prev, headCursor: true }));
+                    setProfileScreen('accessibility');
+                  }}
                 />
               ) : (
                 <Auth 
@@ -598,7 +661,8 @@ export default function App() {
               onClearCart={() => setCart([])}
               onBackToHome={handleBackToHome}
               brandColor={brandColor}
-              defaultPayment={defaultPaymentMethod} // <-- PASADA LA PREFERENCIA DE PAGO GLOBAL
+              defaultPayment={defaultPaymentMethod}
+              idioma={language} // <-- CONECTADA LA PROP DEL IDIOMA GLOBAL
             />
           )}
         </>
