@@ -20,6 +20,7 @@ import Faq from './components/profile/Faq';                      // <-- IMPORTAD
 import PrivacyPolicy from './components/profile/PrivacyPolicy';   // <-- IMPORTADO
 import EditProfile from './components/profile/EditProfile';                 // <-- IMPORTADO
 import NotificationSettings from './components/profile/NotificationSettings'; // <-- IMPORTADO
+import { Home, Heart, ShoppingCart, User, Mic, ChevronUp, ChevronDown } from 'lucide-react'; // <-- IMPORTADOS NUEVOS ICONOS
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -128,6 +129,14 @@ export default function App() {
   const fetchFavorites = async (userId) => {
     const { data } = await supabase.from('favoritos').select('producto_id').eq('usuario_id', userId);
     if (data) setFavorites(data.map(f => f.producto_id));
+  };
+
+  const handleScrollStep = (direction) => {
+    const scrollable = document.querySelector('.scroll-container-norkys');
+    if (scrollable) {
+      // direction: -1 para subir, 1 para bajar. Desliza 220px suavemente.
+      scrollable.scrollBy({ top: direction * 220, behavior: 'smooth' });
+    }
   };
 
   const handleLogout = async () => {
@@ -504,46 +513,46 @@ export default function App() {
     };
   };
 
-  // BARRA DE NAVEGACIÓN BLINDADA (CON BOTONES REALES PARA COMPATIBILIDAD CON CLIC FACIAL)
+  // BARRA DE NAVEGACIÓN BLINDADA (CON DIVS REALES CLIQUEABLES POR CABEZA)
   const renderBottomNav = () => (
     <div 
       style={{ backgroundColor: brandColor, height: '80px', paddingLeft: '40px', paddingRight: '40px' }}
       className="fixed bottom-0 w-full max-w-[450px] rounded-t-[40px] flex justify-between items-center px-10 z-[60] shadow-2xl left-1/2 -translate-x-1/2 transition-colors duration-500"
     >
       {/* Botón Home */}
-      <button 
+      <div 
         onClick={() => handleTabChange('Home')}
         className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
       >
         <Home className={`transition-all ${activeTab === 'Home' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
-      </button>
+      </div>
 
       {/* Botón Favoritos */}
-      <button 
+      <div 
         onClick={() => handleTabChange('Fav')}
         className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
       >
         <Heart className={`transition-all ${activeTab === 'Fav' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
-      </button>
+      </div>
 
       {/* Espacio para micrófono flotante */}
       <div style={{ width: '48px' }}></div> 
 
       {/* Botón Carrito */}
-      <button 
+      <div 
         onClick={() => handleTabChange('Cart')}
         className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
       >
         <ShoppingCart className={`transition-all ${activeTab === 'Cart' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
-      </button>
+      </div>
 
       {/* Botón Perfil */}
-      <button 
+      <div 
         onClick={() => handleTabChange('User')}
         className="p-2 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-transform"
       >
         <User className={`cursor-pointer transition-all ${activeTab === 'User' ? 'text-white scale-110 font-bold' : 'text-white/40'}`} size={24} />
-      </button>
+      </div>
 
       {/* Botón central del micrófono */}
       <div className="absolute left-1/2 -translate-x-1/2" style={{ top: '-32px' }}>
@@ -725,7 +734,29 @@ export default function App() {
         />
       )}
 
-      {/* ================= CONTROLADOR INTELIGENTE DE ACCIONES (NUEVO) ================= */}
+      {/* ================= BOTONES DE SCROLL INCLUSIVOS DE COSTADO (NUEVO) ================= */}
+      {accessibility.headCursor && (
+        <div className="fixed right-4 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-50 animate-in fade-in duration-300">
+          {/* Flecha Arriba */}
+          <div 
+            onClick={() => handleScrollStep(-1)}
+            style={{ borderColor: brandColor }}
+            className="bg-white/90 backdrop-blur-md p-3 rounded-full shadow-lg border-2 text-gray-800 hover:bg-white active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+          >
+            <ChevronUp size={20} style={{ color: brandColor }} strokeWidth={3} />
+          </div>
+          {/* Flecha Abajo */}
+          <div 
+            onClick={() => handleScrollStep(1)}
+            style={{ borderColor: brandColor }}
+            className="bg-white/90 backdrop-blur-md p-3 rounded-full shadow-lg border-2 text-gray-800 hover:bg-white active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+          >
+            <ChevronDown size={20} style={{ color: brandColor }} strokeWidth={3} />
+          </div>
+        </div>
+      )}
+
+      {/* ================= CONTROLADOR INTELIGENTE DE ACCIONES ================= */}
       <DwellController 
         isActive={accessibility.headCursor}
         cursorPos={cursorPos}

@@ -7,41 +7,13 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
   const startPosRef = useRef(null); 
   const graceTicksRef = useRef(0);  
 
-  const scrollTimerRef = useRef(null);
-  const scrollDirectionRef = useRef(0); 
-
   useEffect(() => {
     if (!isActive || !cursorPos) {
       resetDwell();
-      stopScroll();
       return;
     }
 
-    // 1. --- BUCLE DE SCROLL CONTINUO POR PORCENTAJES DE PANTALLA ---
-    // Zona superior (20% de arriba) o Zona inferior (28% de abajo, cubre el navbar completo)
-    const isScrollUpZone = cursorPos.y < window.innerHeight * 0.20;
-    const isScrollDownZone = cursorPos.y > window.innerHeight * 0.72;
-
-    if (isScrollUpZone || isScrollDownZone) {
-      resetDwell(); // APAGAMOS CLICKS AL SCROLLEAR (Evita falsos clics en el menú inferior)
-
-      scrollDirectionRef.current = isScrollUpZone ? -15 : 15;
-
-      if (!scrollTimerRef.current) {
-        scrollTimerRef.current = setInterval(() => {
-          const scrollableGrid = document.querySelector('.scroll-container-norkys');
-          if (scrollableGrid && scrollDirectionRef.current !== 0) {
-            // CORREGIDO: Usamos mutación scrollTop primitiva que funciona sí o sí en todos los navegadores
-            scrollableGrid.scrollTop += scrollDirectionRef.current;
-          }
-        }, 40); 
-      }
-      return; // Bloqueamos la ejecución de clics en este frame
-    } else {
-      stopScroll(); // Si sale de los bordes, apaga el scroll
-    }
-
-    // 2. --- CLIC POR PERMANENCIA CON TOLERANCIA DE TEMBLORES ---
+    // CLIC POR PERMANENCIA CON TOLERANCIA DE TEMBLORES (DWELL CLICK)
     const el = document.elementFromPoint(cursorPos.x, cursorPos.y);
     const clickable = el?.closest('button, a, .cursor-pointer, [onClick]');
 
@@ -87,7 +59,7 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
 
       if (currentProgress >= 100) {
         clearInterval(timerRef.current);
-        targetElement.click(); 
+        targetElement.click(); // Gatilla el click nativo de forma segura
         resetDwell();
       }
     }, 75);
@@ -104,18 +76,9 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
     }
   };
 
-  const stopScroll = () => {
-    scrollDirectionRef.current = 0;
-    if (scrollTimerRef.current) {
-      clearInterval(scrollTimerRef.current);
-      scrollTimerRef.current = null;
-    }
-  };
-
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      stopScroll();
     };
   }, []);
 
