@@ -13,7 +13,7 @@ export default function DwellController({ isActive, cursorPos, brandColor }) {
       return;
     }
 
-    // CLIC POR PERMANENCIA CON TOLERANCIA DE TEMBLORES (DWELL CLICK)
+    // --- CLIC POR PERMANENCIA CON TOLERANCIA DE TEMBLORES ---
     const el = document.elementFromPoint(cursorPos.x, cursorPos.y);
     const clickable = el?.closest('button, a, .cursor-pointer, [onClick]');
 

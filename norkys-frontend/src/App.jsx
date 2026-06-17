@@ -130,11 +130,33 @@ export default function App() {
     if (data) setFavorites(data.map(f => f.producto_id));
   };
 
+  // --- BUSCADOR INTELIGENTE Y RECTIFICADO DE SCROLL ---
   const handleScrollStep = (direction) => {
-    const scrollable = document.querySelector('.scroll-container-norkys');
-    if (scrollable) {
-      // direction: -1 para subir, 1 para bajar. Desliza 220px suavemente.
-      scrollable.scrollBy({ top: direction * 220, behavior: 'smooth' });
+    // 1. Buscamos de forma dinámica CUALQUIER elemento activo en la pantalla con scroll vertical
+    const elements = document.querySelectorAll('*');
+    let scrollableContainer = null;
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+      const style = window.getComputedStyle(el);
+      const isScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+      const hasScroll = el.scrollHeight > el.clientHeight;
+
+      if (isScrollable && hasScroll) {
+        scrollableContainer = el;
+        break; // Detenemos la búsqueda al encontrar el contenedor activo
+      }
+    }
+
+    // 2. Si lo encuentra, aplicamos el deslizamiento con respaldo doble (smooth y scrollTop primitivo)
+    if (scrollableContainer) {
+      if (scrollableContainer.scrollBy) {
+        scrollableContainer.scrollBy({ top: direction * 220, behavior: 'smooth' });
+      } else {
+        scrollableContainer.scrollTop += direction * 220;
+      }
+    } else {
+      console.warn("No se detectó ningún contenedor con scroll activo en la pantalla actual.");
     }
   };
 
