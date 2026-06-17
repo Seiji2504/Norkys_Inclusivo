@@ -132,53 +132,42 @@ export default function App() {
 
   // --- BUSCADOR INTELIGENTE Y RECTIFICADO DE SCROLL ---
   const handleScrollStep = (direction) => {
-    // 1. Primero intentamos buscar de forma explícita por la clase que define el scroll de la app
-    let scrollableContainer = null;
-    const norkysContainers = document.querySelectorAll('.scroll-container-norkys');
+    // 1. Buscamos directamente el contenedor activo que tenga nuestra clase dedicada
+    let scrollableContainer = document.querySelector('.scroll-container-norkys');
 
-    for (let i = 0; i < norkysContainers.length; i++) {
-      const el = norkysContainers[i];
-      const rect = el.getBoundingClientRect();
-      const isVisible = rect.width > 0 && rect.height > 0;
-      const hasScroll = el.scrollHeight > el.clientHeight;
-
-      if (isVisible && hasScroll) {
-        scrollableContainer = el;
-        break;
-      }
-    }
-
-    // 2. Si no se encuentra con la clase, buscamos dinámicamente el contenedor activo más interno
+    // 2. Si no se encuentra, buscamos dinámicamente cualquier elemento con overflow-y activo
     if (!scrollableContainer) {
       const elements = document.querySelectorAll('*');
-      
-      // Recorremos de atrás hacia adelante (de hijos a padres) para evitar detectar 'html' o 'body' primero
       for (let i = elements.length - 1; i >= 0; i--) {
         const el = elements[i];
         const rect = el.getBoundingClientRect();
-        const isVisible = rect.width > 0 && rect.height > 0;
-        if (!isVisible) continue;
+        
+        // Ignoramos elementos invisibles o sin tamaño
+        if (rect.width === 0 || rect.height === 0) continue;
 
         const style = window.getComputedStyle(el);
-        const isScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
-        const hasScroll = el.scrollHeight > el.clientHeight;
+        const hasScrollStyle = style.overflowY === 'auto' || style.overflowY === 'scroll';
 
-        if (isScrollable && hasScroll) {
+        if (hasScrollStyle) {
           scrollableContainer = el;
-          break; // Detiene la búsqueda al encontrar el contenedor activo más profundo
+          break;
         }
       }
     }
 
-    // 3. Si se encuentra el contenedor adecuado, aplicamos el desplazamiento
+    // 3. Si todo lo anterior falla, recurrimos al scroll general de la página (html / body)
+    if (!scrollableContainer) {
+      scrollableContainer = document.scrollingElement || document.documentElement || document.body;
+    }
+
+    // 4. Ejecutamos el scroll de forma segura y registramos en consola qué elemento se está moviendo
     if (scrollableContainer) {
+      console.log("Desplazando contenedor detectado:", scrollableContainer);
       if (scrollableContainer.scrollBy) {
         scrollableContainer.scrollBy({ top: direction * 220, behavior: 'smooth' });
       } else {
         scrollableContainer.scrollTop += direction * 220;
       }
-    } else {
-      console.warn("No se detectó ningún contenedor con scroll activo en la pantalla actual.");
     }
   };
 
