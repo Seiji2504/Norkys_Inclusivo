@@ -132,23 +132,45 @@ export default function App() {
 
   // --- BUSCADOR INTELIGENTE Y RECTIFICADO DE SCROLL ---
   const handleScrollStep = (direction) => {
-    // 1. Buscamos de forma dinámica CUALQUIER elemento activo en la pantalla con scroll vertical
-    const elements = document.querySelectorAll('*');
+    // 1. Primero intentamos buscar de forma explícita por la clase que define el scroll de la app
     let scrollableContainer = null;
+    const norkysContainers = document.querySelectorAll('.scroll-container-norkys');
 
-    for (let i = 0; i < elements.length; i++) {
-      const el = elements[i];
-      const style = window.getComputedStyle(el);
-      const isScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+    for (let i = 0; i < norkysContainers.length; i++) {
+      const el = norkysContainers[i];
+      const rect = el.getBoundingClientRect();
+      const isVisible = rect.width > 0 && rect.height > 0;
       const hasScroll = el.scrollHeight > el.clientHeight;
 
-      if (isScrollable && hasScroll) {
+      if (isVisible && hasScroll) {
         scrollableContainer = el;
-        break; // Detenemos la búsqueda al encontrar el contenedor activo
+        break;
       }
     }
 
-    // 2. Si lo encuentra, aplicamos el deslizamiento con respaldo doble (smooth y scrollTop primitivo)
+    // 2. Si no se encuentra con la clase, buscamos dinámicamente el contenedor activo más interno
+    if (!scrollableContainer) {
+      const elements = document.querySelectorAll('*');
+      
+      // Recorremos de atrás hacia adelante (de hijos a padres) para evitar detectar 'html' o 'body' primero
+      for (let i = elements.length - 1; i >= 0; i--) {
+        const el = elements[i];
+        const rect = el.getBoundingClientRect();
+        const isVisible = rect.width > 0 && rect.height > 0;
+        if (!isVisible) continue;
+
+        const style = window.getComputedStyle(el);
+        const isScrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+        const hasScroll = el.scrollHeight > el.clientHeight;
+
+        if (isScrollable && hasScroll) {
+          scrollableContainer = el;
+          break; // Detiene la búsqueda al encontrar el contenedor activo más profundo
+        }
+      }
+    }
+
+    // 3. Si se encuentra el contenedor adecuado, aplicamos el desplazamiento
     if (scrollableContainer) {
       if (scrollableContainer.scrollBy) {
         scrollableContainer.scrollBy({ top: direction * 220, behavior: 'smooth' });
@@ -757,7 +779,7 @@ export default function App() {
 
       {/* ================= BOTONES DE SCROLL INCLUSIVOS DE COSTADO (NUEVO) ================= */}
       {accessibility.headCursor && (
-        <div className="fixed right-4 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-50 animate-in fade-in duration-300">
+        <div className="fixed right-4 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-[9000] animate-in fade-in duration-300">
           {/* Flecha Arriba */}
           <div 
             onClick={() => handleScrollStep(-1)}
