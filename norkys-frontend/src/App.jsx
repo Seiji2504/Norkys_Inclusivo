@@ -132,17 +132,16 @@ export default function App() {
 
   // --- BUSCADOR INTELIGENTE Y RECTIFICADO DE SCROLL ---
   const handleScrollStep = (direction) => {
-    // 1. Buscamos directamente el contenedor activo que tenga nuestra clase dedicada
+    // 1. Buscamos el contenedor activo por su clase
     let scrollableContainer = document.querySelector('.scroll-container-norkys');
 
-    // 2. Si no se encuentra, buscamos dinámicamente cualquier elemento con overflow-y activo
+    // 2. Si no existe la clase, buscamos el primer elemento visible con overflow-y
     if (!scrollableContainer) {
       const elements = document.querySelectorAll('*');
       for (let i = elements.length - 1; i >= 0; i--) {
         const el = elements[i];
         const rect = el.getBoundingClientRect();
         
-        // Ignoramos elementos invisibles o sin tamaño
         if (rect.width === 0 || rect.height === 0) continue;
 
         const style = window.getComputedStyle(el);
@@ -155,19 +154,41 @@ export default function App() {
       }
     }
 
-    // 3. Si todo lo anterior falla, recurrimos al scroll general de la página (html / body)
-    if (!scrollableContainer) {
-      scrollableContainer = document.scrollingElement || document.documentElement || document.body;
+    const distance = direction * 220;
+
+    // --- SCROLL PROGRESIVO DE RESPALDO ---
+    
+    // Paso A: Intentar scroll en el contenedor específico detectado
+    if (scrollableContainer) {
+      console.log("Paso A - Intentando scroll en elemento:", scrollableContainer);
+      if (scrollableContainer.scrollBy) {
+        scrollableContainer.scrollBy({ top: distance, behavior: 'smooth' });
+      }
+      scrollableContainer.scrollTop += distance; // Respaldo sin animación
     }
 
-    // 4. Ejecutamos el scroll de forma segura y registramos en consola qué elemento se está moviendo
-    if (scrollableContainer) {
-      console.log("Desplazando contenedor detectado:", scrollableContainer);
-      if (scrollableContainer.scrollBy) {
-        scrollableContainer.scrollBy({ top: direction * 220, behavior: 'smooth' });
-      } else {
-        scrollableContainer.scrollTop += direction * 220;
+    // Paso B: Propagar el scroll a los elementos padres (Burbujeo manual)
+    let parent = scrollableContainer ? scrollableContainer.parentElement : null;
+    while (parent && parent !== document.body) {
+      if (parent.scrollBy) {
+        parent.scrollBy({ top: distance, behavior: 'smooth' });
       }
+      parent.scrollTop += distance;
+      parent = parent.parentElement;
+    }
+
+    // Paso C: Forzar el scroll en las capas globales del navegador (html, body y window)
+    console.log("Paso C - Forzando scroll global en viewport");
+    window.scrollBy({ top: distance, behavior: 'smooth' });
+    
+    if (document.documentElement) {
+      document.documentElement.scrollBy?.({ top: distance, behavior: 'smooth' });
+      document.documentElement.scrollTop += distance;
+    }
+    
+    if (document.body) {
+      document.body.scrollBy?.({ top: distance, behavior: 'smooth' });
+      document.body.scrollTop += distance;
     }
   };
 
