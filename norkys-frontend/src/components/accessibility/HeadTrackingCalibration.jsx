@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Camera, Check } from 'lucide-react';
+import { ChevronLeft, Camera, Check, ShieldAlert } from 'lucide-react';
 
 export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, brandColor }) {
-  const [status, setStatus] = useState('idle'); // 'idle' | 'scanning' | 'success'
+  const [status, setStatus] = useState('idle'); // 'idle' | 'preview' | 'scanning' | 'success'
   const [countdown, setCountdown] = useState(null);
   
+  // NUEVO ESTADO: Controla el Modal de Permisos de la Cámara
+  const [showPermissionModal, setShowPermissionModal] = useState(true);
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const activeNoseCoords = useRef([]);
 
-  // Cargar dependencias de Google MediaPipe
   const loadScript = (src) => {
     return new Promise((resolve, reject) => {
       if (document.querySelector(`script[src="${src}"]`)) return resolve();
@@ -23,23 +25,20 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     });
   };
 
-  // ENCENDER CÁMARA AUTOMÁTICAMENTE AL MONTAR EL COMPONENTE
-  useEffect(() => {
-    startPreviewCamera();
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
+  // ESTA FUNCIÓN SE DISPARA CON EL CLIC DEL MODAL (Gesto de usuario seguro en móviles)
+  const handleAllowCamera = async () => {
+    setShowPermissionModal(false);
+    await startPreviewCamera();
+  };
 
   const startPreviewCamera = async () => {
     try {
+      setStatus('idle');
       // 1. Cargar dependencias de Google MediaPipe
       await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
       await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js');
 
-      // 2. Encender cámara web
+      // 2. Encender cámara web de forma segura
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: 320, height: 240, facingMode: 'user' } 
       });
@@ -76,28 +75,22 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
 
     faceMesh.onResults((results) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // === LA LÍNEA MÁGICA: Dibuja tu rostro en vivo como fondo del lienzo ===
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
       if (results.multiFaceLandmarks && results.multiFaceLandmarks[0]) {
         const landmarks = results.multiFaceLandmarks[0];
         const nose = landmarks[4]; // Punta de la nariz
         
-        // Capturar coordenadas de calibración solo en fase de escaneo activo
-        // El estado 'scanning-active' se activa al pulsar el botón
         if (activeNoseCoords.current && activeNoseCoords.current.active) {
           activeNoseCoords.current.push({ x: nose.x, y: nose.y });
         }
 
         // --- FEEDBACK VISUAL DE LOS PUNTOS FACIALES ---
         ctx.fillStyle = brandColor;
-        // Nariz
         ctx.beginPath();
         ctx.arc(nose.x * canvas.width, nose.y * canvas.height, 5, 0, 2 * Math.PI);
         ctx.fill();
 
-        // Ojos
         const leftEye = landmarks[33];
         const rightEye = landmarks[263];
         ctx.beginPath();
@@ -116,13 +109,13 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     });
     
     camera.start();
-    setStatus('preview'); // Estado de vista previa lista
+    setStatus('preview'); // Vista previa lista
   };
 
   const triggerCalibrationScan = () => {
     setStatus('scanning');
     activeNoseCoords.current = [];
-    activeNoseCoords.current.active = true; // Activa la toma de muestras de la nariz
+    activeNoseCoords.current.active = true;
     startCountdown();
   };
 
@@ -146,8 +139,7 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
   const processCalibration = () => {
     setStatus('success');
     const coords = activeNoseCoords.current;
-    
-    let finalNose = { x: 0.5, y: 0.5 }; // Centro por defecto
+    let finalNose = { x: 0.5, y: 0.5 };
 
     if (coords && coords.length > 0) {
       const sumXReal = coords.reduce((acc, p) => acc + p.x, 0);
@@ -160,13 +152,45 @@ export default function HeadTrackingCalibration({ onBack, onCalibrationSuccess, 
     window.speechSynthesis.speak(utterance);
 
     setTimeout(() => {
-      onCalibrationSuccess(finalNose); // Regresa a accesibilidad con el origen
+      onCalibrationSuccess(finalNose);
     }, 1500);
   };
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   return (
     <div className="flex-1 bg-[#FDFBF7] relative pb-28 flex flex-col overflow-y-auto no-scrollbar animate-in slide-in-from-right duration-300">
       
+      {/* MODAL DE PERMISOS DE CAMÁRA INTEGRADO (Soluciona el bloqueo en iOS/Android) */}
+      {showPermissionModal && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center px-6">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] p-8 text-center shadow-2xl animate-in zoom-in-95">
+            <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 text-[#2E7D32]">
+              <Camera size={40} />
+            </div>
+            <h2 className="text-2xl font-black text-gray-800 mb-3">Acceso a la Cámara</h2>
+            <p className="text-gray-400 text-xs leading-relaxed mb-6 font-bold">
+              Norky's Inclusivo necesita acceder a tu cámara frontal para calibrar el cursor por movimiento de cabeza. 
+              Tus datos de video se procesan 100% de forma local en tu celular y nunca se guardarán en internet.
+            </p>
+            <button 
+              type="button"
+              onClick={handleAllowCamera} // <-- EL CLIC QUE DESBLOQUEA LA CÁMARA
+              style={{ backgroundColor: brandColor }}
+              className="w-full text-white py-4 rounded-full font-black text-md shadow-lg active:scale-95 transition-all cursor-pointer"
+            >
+              PERMITIR CÁMARA
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Cabecera */}
       <div className="pt-8 px-6 flex items-center shrink-0">
         <button onClick={onBack} className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-md text-gray-800 border border-gray-100 hover:bg-white"><ChevronLeft size={24} /></button>

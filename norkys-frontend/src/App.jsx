@@ -43,6 +43,9 @@ export default function App() {
   const [sortBy, setSortBy] = useState('normal'); 
   const [cart, setCart] = useState([]);
 
+  // --- ESTADO PARA CONTROLAR EL PEDIDO SELECCIONADO (CONECTADO A LA IA) ---
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
   const [language, setLanguage] = useState('es'); // Idioma global: 'es' | 'en'
 
   // CONFIGURACIÓN DE ACCESIBILIDAD GLOBAL
@@ -108,13 +111,22 @@ export default function App() {
       try {
         const { data, error } = await supabase.from('perfiles').select('*').eq('id', session.user.id);
         if (error) throw error;
+        
+        // CORRECCIÓN: Si el perfil no existe, solo lo cargamos en memoria temporal. No escribimos en la BD para evitar pisar el registro real de Auth.jsx.
         if (!data || data.length === 0) {
           const fallbackName = session.user.email.split('@')[0];
-          setUserData({ nombre_completo: fallbackName, email: session.user.email, foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + fallbackName });
-          await supabase.from('perfiles').upsert([{ id: session.user.id, nombre_completo: fallbackName, telefono: '', rol: 'cliente' }]);
+          setUserData({
+            nombre_completo: fallbackName,
+            email: session.user.email,
+            foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + fallbackName
+          });
         } else {
           const profile = data[0];
-          setUserData({ nombre_completo: profile.nombre_completo, email: session.user.email, foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + profile.nombre_completo.replace(/\s+/g, '') });
+          setUserData({
+            nombre_completo: profile.nombre_completo,
+            email: session.user.email,
+            foto: 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + profile.nombre_completo.replace(/\s+/g, '')
+          });
         }
         fetchFavorites(session.user.id);
       } catch (err) { console.error(err.message); }
@@ -398,173 +410,186 @@ export default function App() {
 
   const [isGlobalListening, setIsGlobalListening] = useState(false);
   const recognitionRef = useRef(null); // <-- Referencia para controlar el micrófono activo
-  
-  // --- ASISTENTE DE VOZ GLOBAL INTELIGENTE (MULTI-ACCIÓN Y MULTILINGÜE COMPLETO) ---
+  const silenceTimerRef = useRef(null);
+
+  // --- ASISTENTE DE VOZ GLOBAL INTELIGENTE (MULTI-ACCIÓN CON VAD DE SILENCIO) ---
   const handleGlobalVoiceAssistant = () => {
-    playInteractionFeedback();
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Navegador no compatible");
+  playInteractionFeedback();
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return alert("Navegador no compatible");
 
-    // CORRECCIÓN: Si el usuario pulsa el micrófono mientras ya está escuchando, actúa como un interruptor de apagado
-    if (isGlobalListening) {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort(); // Detiene y libera el micrófono de inmediato
-      }
-      setIsGlobalListening(false);
-      return;
-    }
+  if (isGlobalListening) {
+    if (recognitionRef.current) { recognitionRef.current.abort(); }
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    setIsGlobalListening(false);
+    return;
+  }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'es-PE';
-    recognitionRef.current = recognition; // Guardamos la referencia activa para poder controlarla
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'es-PE';
+  recognition.continuous = true; // <-- HABILITADO CONTINUO para que no corte al pensar xd
+  recognitionRef.current = recognition;
 
-    recognition.start();
-    setIsGlobalListening(true);
-
-    recognition.onresult = async (event) => {
-      const transcript = event.results[0][0].transcript;
-      setIsGlobalListening(false);
-      try {
-        const response = await fetch('https://norkys-backend.onrender.com/api/intent', { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ text: transcript }) 
-        });
-        
-        if (!response.ok) throw new Error("Error en el backend");
-        const data = await response.json();
-
-        // EJECUTAMOS EL BUCLE DE ACCIONES SECUENCIALES DETECTADAS POR GEMINI (Multitarea)
-        if (data.actions && data.actions.length > 0) {
-          data.actions.forEach(act => {
-            
-            // 1. ACCIÓN: NAVEGAR A CUALQUIERA DE LAS 14 PANTALLAS DEL SISTEMA
-            if (act.action === 'navigate') {
-              setSelectedProduct(null); // Cerramos el plato si estaba abierto
-
-              if (act.target === 'accessibility') {
-                setActiveTab('User');
-                setProfileScreen('accessibility');
-              } else if (act.target === 'orders') {
-                setActiveTab('User');
-                setProfileScreen('orders');
-              } else if (act.target === 'payments') {
-                setActiveTab('User');
-                setProfileScreen('payments');
-              } else if (act.target === 'addresses') {
-                setActiveTab('User');
-                setProfileScreen('addresses');
-              } else if (act.target === 'notifications') {
-                setActiveTab('User');
-                setProfileScreen('notifications');
-              } else if (act.target === 'faq') {
-                setActiveTab('User');
-                setProfileScreen('faq');
-              } else if (act.target === 'privacy') {
-                setActiveTab('User');
-                setProfileScreen('privacy');
-              } else if (act.target === 'edit_profile') {
-                setActiveTab('User');
-                setProfileScreen('edit_profile');
-              } else if (act.target === 'calibration') {
-                setActiveTab('User');
-                setProfileScreen('calibration');
-              } else if (act.target === 'auth') {
-                setActiveTab('User');
-                setProfileScreen('auth');
-              } else {
-                handleTabChange(act.target); // Home, Fav, Cart
-              }
-            } 
-            
-            // 2. ACCIÓN: AJUSTES VISUALES (ACCESIBILIDAD)
-            else if (act.action === 'adjust_accessibility') {
-              setAccessibility(prev => {
-                let next = { ...prev };
-                if (act.target === 'textSize') {
-                  next.textSize = act.value === 'increase' ? Math.min(4, prev.textSize + 1) : Math.max(1, prev.textSize - 1);
-                } else if (act.target === 'contrast') {
-                  next.contrast = prev.contrast === 4 ? 1 : prev.contrast + 1;
-                } else if (act.target === 'dyslexia') {
-                  next.dyslexia = !prev.dyslexia;
-                } else if (act.target === 'headCursor') {
-                  next.headCursor = !prev.headCursor;
-                }
-                return next;
-              });
-            } 
-            
-            // 3. ACCIÓN: FILTRAR PLATOS DE LA CARTA
-            else if (act.action === 'filter') {
-              if (act.target === 'category') {
-                handleCategoryChange(act.value);
-              } else if (act.target === 'search') {
-                setSearchTerm(act.value);
-              }
-            }
-
-            // 4. ACCIÓN: ABRIR UN PLATO ESPECÍFICO (Ir a Detalle)
-            else if (act.action === 'open_product') {
-              const matchedProd = productos.find(p => 
-                p.nombre.toLowerCase().includes(act.target.toLowerCase())
-              );
-              if (matchedProd) {
-                handleProductClick(matchedProd);
-              }
-            }
-
-            // 5. ACCIÓN: AGREGAR AL CARRITO POR VOZ
-            else if (act.action === 'add_to_cart') {
-              if (!isLoggedIn) {
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance("Necesitas iniciar sesión para usar el carrito. Te llevo al perfil."));
-                handleTabChange('User');
-                setProfileScreen('auth');
-                return;
-              }
-
-              const matchedProd = productos.find(p => 
-                p.nombre.toLowerCase().includes(act.target.toLowerCase())
-              );
-
-              if (matchedProd) {
-                handleAddToCart({
-                  producto: matchedProd,
-                  cantidad: parseInt(act.value) || 1,
-                  complements: [],
-                  aditivos: []
-                });
-              }
-            }
-
-            // 6. ACCIÓN: VACIAR EL CARRITO EN CALIENTE
-            else if (act.action === 'clear_cart') {
-              setCart([]);
-            }
-
-          });
-        }
-
-        // El sintetizador te habla de vuelta en el idioma correcto (Español o Inglés)
-        const utterance = new SpeechSynthesisUtterance(data.message);
-        utterance.lang = language === 'en' ? 'en-US' : 'es-PE'; 
-        window.speechSynthesis.speak(utterance);
-
-      } catch (err) { 
-        console.error("Error en la IA:", err); 
-        alert("El asistente de voz tuvo un problema. Asegúrate de tener encendido tu backend en Python. xd");
-      }
-    };
-
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error);
-      setIsGlobalListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsGlobalListening(false);
-      recognitionRef.current = null;
-    };
+  // Función VAD: Si pasan 3.5 segundos de silencio absoluto, procesa la orden de forma autónoma
+  const resetSilenceTimer = () => {
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = setTimeout(() => {
+      recognition.stop(); // Detiene la grabación y dispara onresult
+    }, 3500); 
   };
+
+  recognition.onstart = () => {
+    setIsGlobalListening(true);
+    resetSilenceTimer();
+  };
+
+  recognition.onsoundstart = () => {
+    resetSilenceTimer(); // Resetea el tiempo si sigues hablando
+  };
+
+  recognition.onresult = async (event) => {
+    resetSilenceTimer();
+    const transcript = event.results[event.results.length - 1][0].transcript;
+    
+    try {
+      const response = await fetch('https://norkys-backend.onrender.com/api/intent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: transcript }) });
+      
+      if (!response.ok) throw new Error("Error en el backend");
+      const data = await response.json();
+
+      if (data.actions && data.actions.length > 0) {
+        // Bucle asíncrono secuencial para ejecutar todos los comandos en cadena
+        for (const act of data.actions) {
+          
+          // A. ACCIÓN: NAVEGAR A LAS 14 PANTALLAS
+          if (act.action === 'navigate') {
+            setSelectedProduct(null);
+            if (act.target === 'accessibility') { setActiveTab('User'); setProfileScreen('accessibility'); }
+            else if (act.target === 'orders') { setActiveTab('User'); setProfileScreen('orders'); }
+            else if (act.target === 'payments') { setActiveTab('User'); setProfileScreen('payments'); }
+            else if (act.target === 'addresses') { setActiveTab('User'); setProfileScreen('addresses'); }
+            else if (act.target === 'notifications') { setActiveTab('User'); setProfileScreen('notifications'); }
+            else if (act.target === 'faq') { setActiveTab('User'); setProfileScreen('faq'); }
+            else if (act.target === 'privacy') { setActiveTab('User'); setProfileScreen('privacy'); }
+            else if (act.target === 'edit_profile') { setActiveTab('User'); setProfileScreen('edit_profile'); }
+            else if (act.target === 'calibration') { setActiveTab('User'); setProfileScreen('calibration'); }
+            else if (act.target === 'auth') { setActiveTab('User'); setProfileScreen('auth'); }
+            else { handleTabChange(act.target); }
+          } 
+          
+          // B. ACCIÓN: AJUSTAR ACCESIBILIDAD EN CALIENTE
+          else if (act.action === 'adjust_accessibility') {
+            setAccessibility(prev => {
+              let next = { ...prev };
+              if (act.target === 'textSize') {
+                next.textSize = act.value === 'increase' ? Math.min(4, prev.textSize + 1) : Math.max(1, prev.textSize - 1);
+              } else if (act.target === 'contrast') {
+                next.contrast = prev.contrast === 4 ? 1 : prev.contrast + 1;
+              } else if (act.target === 'dyslexia') { next.dyslexia = !prev.dyslexia; }
+              else if (act.target === 'headCursor') { next.headCursor = !prev.headCursor; }
+              return next;
+            });
+          } 
+          
+          // C. ACCIÓN: FILTRAR PLATOS DE LA CARTA
+          else if (act.action === 'filter') {
+            if (act.target === 'category') { handleCategoryChange(act.value); }
+            else if (act.target === 'search') { setSearchTerm(act.value); }
+          }
+
+          // D. ACCIÓN: ABRIR DETALLE DEL PLATO
+          else if (act.action === 'open_product') {
+            const matchedProd = productos.find(p => p.nombre.toLowerCase().includes(act.target.toLowerCase()));
+            if (matchedProd) { handleProductClick(matchedProd); }
+          }
+
+          // E. ACCIÓN: AGREGAR AL CARRITO DIRECTO
+          else if (act.action === 'add_to_cart') {
+            if (!isLoggedIn) {
+              window.speechSynthesis.speak(new SpeechSynthesisUtterance("Necesitas iniciar sesión para usar el carrito."));
+              handleTabChange('User');
+              setProfileScreen('auth');
+              return;
+            }
+            const matchedProd = productos.find(p => p.nombre.toLowerCase().includes(act.target.toLowerCase()));
+            if (matchedProd) { handleAddToCart({ producto: matchedProd, cantidad: parseInt(act.value) || 1, complements: [], aditivos: [] }); }
+          }
+
+          // F. ACCIÓN: VACIAR EL CARRITO EN CALIENTE
+          else if (act.action === 'clear_cart') {
+            setCart([]);
+          }
+
+          // G. ACCIÓN: ELIMINAR 1 PRODUCTO ESPECÍFICO DEL CARRITO
+          else if (act.action === 'remove_from_cart') {
+            const matchedProd = productos.find(p => p.nombre.toLowerCase().includes(act.target.toLowerCase()));
+            if (matchedProd) {
+              setCart(prev => prev.filter(item => item.producto.id !== matchedProd.id));
+            }
+          }
+
+          // H. ACCIÓN: AGREGAR A FAVORITOS POR VOZ
+          else if (act.action === 'add_to_favorites') {
+            const matchedProd = productos.find(p => p.nombre.toLowerCase().includes(act.target.toLowerCase()));
+            if (matchedProd && !favorites.includes(matchedProd.id)) {
+              await toggleFavorite(null, matchedProd.id);
+            }
+          }
+
+          // I. ACCIÓN: QUITAR DE FAVORITOS POR VOZ
+          else if (act.action === 'remove_from_favorites') {
+            const matchedProd = productos.find(p => p.nombre.toLowerCase().includes(act.target.toLowerCase()));
+            if (matchedProd && favorites.includes(matchedProd.id)) {
+              await toggleFavorite(null, matchedProd.id);
+            }
+          }
+
+          // J. ACCIÓN: ORDENAR LA CARTA EN CALIENTE
+          else if (act.action === 'sort') {
+            setSortBy(act.target);
+          }
+
+          // K. ACCIÓN: SELECCIONAR MÉTODO DE PAGO EN EL CARRITO
+          else if (act.action === 'select_payment_method') {
+            setDefaultPaymentMethod(act.target);
+          }
+
+          // L. ACCIÓN: VER DETALLES DE UN PEDIDO ESPECÍFICO POR VOZ (Conexión real con la BD)
+          else if (act.action === 'open_order_details') {
+            const orderId = parseInt(act.target);
+            if (!isNaN(orderId)) {
+              const { data } = await supabase
+                .from('pedidos')
+                .select('*, detalle_pedidos(*, productos(*))')
+                .eq('id', orderId);
+
+              if (data && data.length > 0) {
+                setSelectedOrder(data[0]);
+                setActiveTab('User');
+                setProfileScreen('orders_detail');
+              }
+            }
+          }
+
+        } // <-- CORRECCIÓN: Cierra correctamente el bloque 'for (const act of data.actions)'
+      } // <-- CORRECCIÓN: Cierra correctamente el bloque 'if (data.actions && ...)'
+
+      const utterance = new SpeechSynthesisUtterance(data.message);
+      utterance.lang = language === 'en' ? 'en-US' : 'es-PE'; 
+      window.speechSynthesis.speak(utterance);
+
+    } catch (err) { 
+      console.error(err); 
+    }
+  };
+
+  recognition.onerror = () => setIsGlobalListening(false);
+  recognition.onend = () => {
+    setIsGlobalListening(false);
+    recognitionRef.current = null;
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+  };
+};
 
   // BARRA DE NAVEGACIÓN BLINDADA (CON DIVS REALES CLIQUEABLES POR CABEZA)
   const renderBottomNav = () => (
@@ -683,8 +708,21 @@ export default function App() {
               ) : profileScreen === 'orders' ? (
                 /* ================= PERFIL: PESTAÑA HISTORIAL PEDIDOS (NUEVO) ================= */
                 <OrderHistory 
-                  isLoggedIn={isLoggedIn}
-                  onBack={() => setProfileScreen('menu')}
+                  isLoggedIn={isLoggedIn} 
+                  onBack={() => setProfileScreen('menu')} 
+                  brandColor={brandColor} 
+                  idioma={language} 
+                  onSelectOrder={(order) => {
+                    // Guarda el pedido y abre sus detalles de Supabase
+                    setSelectedOrder(order);
+                    setProfileScreen('orders_detail');
+                  }}
+                />
+              ) : profileScreen === 'orders_detail' ? (
+                /* ================= PERFIL: PESTAÑA DETALLE DE PEDIDO (NUEVO) ================= */
+                <OrderDetail 
+                  pedido={selectedOrder}
+                  onBack={() => setProfileScreen('orders')} // Regresa al historial
                   brandColor={brandColor}
                   idioma={language}
                 />
@@ -744,7 +782,11 @@ export default function App() {
               ) : (
                 <Auth 
                   onBack={() => setProfileScreen('menu')} 
-                  onAuthSuccess={() => setProfileScreen('menu')} 
+                  onAuthSuccess={async () => {
+                    // CORREGIDO: Al loguearse/registrase con éxito, recargamos el perfil en caliente de Supabase
+                    await reloadProfile(); 
+                    setProfileScreen('menu');
+                  }} 
                 />
               )}
             </>
