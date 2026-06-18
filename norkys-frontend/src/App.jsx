@@ -589,6 +589,8 @@ export default function App() {
     recognitionRef.current = null;
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
   };
+  // === LA LÍNEA MÁGICA: Enciende físicamente el micrófono del celular/PC ===
+    recognition.start(); 
 };
 
   // BARRA DE NAVEGACIÓN BLINDADA (CON DIVS REALES CLIQUEABLES POR CABEZA)
