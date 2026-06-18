@@ -27,10 +27,10 @@ app.add_middleware(
 # CADA ACCION INDIVIDUAL COMPATIBLE
 class SingleAction(BaseModel):
     action: str = Field(
-        description="Acción: 'navigate', 'adjust_accessibility', 'filter', 'open_product', 'add_to_cart', 'remove_from_cart', 'clear_cart', 'add_to_favorites', 'remove_from_favorites', 'sort', 'select_payment_method', 'open_order_details'"
+        description="Acción. Valores permitidos: 'navigate', 'adjust_accessibility', 'filter', 'open_product', 'add_to_cart', 'remove_from_cart', 'clear_cart', 'add_to_favorites', 'remove_from_favorites', 'sort', 'select_payment_method', 'open_order_details'"
     )
     target: str = Field(
-        description="Objetivo de la acción. Si navigate: 'Home', 'User', 'Fav', 'Cart', 'accessibility', 'orders', 'payments', 'addresses', 'notifications', 'faq', 'privacy', 'edit_profile', 'calibration', 'auth'. Si adjust_accessibility: 'textSize', 'contrast', 'dyslexia', 'headCursor'. Si add_to_cart, remove_from_cart, add_to_favorites, remove_from_favorites, open_product: Nombre del producto. Si sort: 'price-asc', 'price-desc', 'rating'. Si select_payment_method: 'efectivo', 'tarjeta'. Si open_order_details: ID numérico del pedido (ej. '1234')."
+        description="Objetivo de la acción. Si navigate: 'Home', 'User', 'Fav', 'Cart', 'accessibility', 'orders', 'payments', 'addresses', 'notifications', 'faq', 'privacy', 'edit_profile', 'calibration', 'auth'. Si adjust_accessibility: 'textSize', 'contrast', 'dyslexia', 'headCursor'. Si open_product, add_to_cart, remove_from_cart, add_to_favorites, remove_from_favorites: Nombre del producto. Si sort: 'price-asc', 'price-desc', 'rating'. Si select_payment_method: 'efectivo', 'tarjeta'. Si open_order_details: ID numérico del pedido (ej. '1234')."
     )
     value: str = Field(
         description="Valor. Si target='textSize': 'increase' o 'decrease'. Si target='category': 'Todo', 'Combos', 'Complementos', 'Ofertas'. Si add_to_cart: la cantidad (ej. '1'). En los demás casos: ''."
