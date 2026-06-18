@@ -62,12 +62,12 @@ export default function ProductDetail({ producto, onBack, onAddToCart, isLoggedI
 
   const getAditivoImg = (nombre) => {
     const imgs = {
-      'Mayonesa': 'https://vgy.me/gI44gO.png',
-      'Ketchup': 'https://vgy.me/pX8rD0.png',
-      'Mostaza': 'https://vgy.me/Yc3VjD.png',
-      'Vinagreta': 'https://vgy.me/XG0FkE.png'
+      'Mayonesa': '/assets/mayonesa_1.webp',
+      'Ketchup': '/assets/ketchup_1.webp',
+      'Mostaza': '/assets/mostaza_1.webp',
+      'Vinagreta': '/assets/vinagreta_1.webp'
     };
-    return imgs[nombre] || 'https://vgy.me/gI44gO.png';
+    return imgs[nombre] || '/assets/aji_1.webp';
   };
 
   return (

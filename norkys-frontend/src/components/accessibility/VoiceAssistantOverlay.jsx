@@ -35,7 +35,7 @@ export default function VoiceAssistantOverlay({ brandColor }) {
       {/* Mascota del Pollo (Mockup Pág 27) */}
       <div className="w-56 h-56 rounded-full bg-orange-100/50 border-4 border-orange-200 shadow-xl flex items-center justify-center overflow-hidden mb-10 shrink-0">
         <img 
-          src="https://vgy.me/f9bDSW.png" // Ilustración amigable del pollo Norky's
+          src="/assets/logo_pollo_v1.webp" // Ilustración amigable del pollo Norky's
           alt="Norkys Mascot" 
           className="w-40 h-40 object-contain"
         />
