@@ -506,11 +506,15 @@ export default function App() {
           // E. ACCIÓN: AGREGAR AL CARRITO DIRECTO
           else if (act.action === 'add_to_cart') {
             if (!isLoggedIn) {
-              window.speechSynthesis.speak(new SpeechSynthesisUtterance("Necesitas iniciar sesión para usar el carrito."));
-              handleTabChange('User');
-              setProfileScreen('auth');
-              return;
-            }
+                // CORREGIDO: Forzamos la voz y el idioma del navegador para invitados (evita acento gringo)
+                const ut = new SpeechSynthesisUtterance(language === 'en' ? "You need to log in to use the shopping cart." : "Necesitas iniciar sesión para usar el carrito.");
+                ut.lang = language === 'en' ? 'en-US' : 'es-PE';
+                window.speechSynthesis.speak(ut);
+
+                handleTabChange('User');
+                setProfileScreen('auth');
+                return;
+              }
             const matchedProd = productos.find(p => p.nombre.toLowerCase().includes(act.target.toLowerCase()));
             if (matchedProd) { handleAddToCart({ producto: matchedProd, cantidad: parseInt(act.value) || 1, complements: [], aditivos: [] }); }
           }
